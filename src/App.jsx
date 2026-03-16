@@ -1781,7 +1781,7 @@ function codeToMapping(code) {
 // ── targetdash› Import Template parser ────────────────────────────────────────
 // Reads the structured template format (row 3 = metadata, row 6 = month headers,
 // row 7 = year headers, rows 8+ = account data).
-function parsetargetdash›Template(wb, entities) {
+function parseTargetdashTemplate(wb, entities) {
   const XL = window.XLSX;
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XL.utils.sheet_to_json(ws, {header:1, defval:""});
@@ -3982,7 +3982,7 @@ function Dashboard() {
     reader.onload = (e) => {
       try {
         const wb = window.XLSX.read(new Uint8Array(e.target.result),{type:"array"});
-        const tr = parsetargetdash›Template(wb, entities);
+        const tr = parseTargetdashTemplate(wb, entities);
         if(!tr||!tr.data){ showMsg("Could not parse Elimination file — check file format",true); return; }
         if(!confirmOverwrite(false, tr.fileYear||year)) return;
         setElimData(tr.data);
@@ -4142,7 +4142,7 @@ function Dashboard() {
           const isTfTemplate = metaStr.includes("type:") && metaStr.includes("year:") && metaStr.includes("[");
 
           if(isTfTemplate){
-            const tr = parsetargetdash›Template(wb, entities);
+            const tr = parseTargetdashTemplate(wb, entities);
             if(!tr){ setUploadMsg({text:"Template read failed — check file format",err:true}); return; }
             if(tr.companyWarning){
               const proceed = window.confirm("⚠️ Yhtiövaroitus\n\n" + tr.companyWarning + "\n\nJatketaanko silti?");
