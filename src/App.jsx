@@ -4764,6 +4764,7 @@ function LoginScreen({onLogin}) {
   const [loading, setLoading] = React.useState(false);
   const [success, setSuccess] = React.useState(false);
   const canvasRef = React.useRef(null);
+  const t = React.useRef(0);
 
   // ── Animated canvas background ──────────────────────────────────────────
   React.useEffect(() => {
@@ -4773,135 +4774,81 @@ function LoginScreen({onLogin}) {
     let raf;
     let W = canvas.width  = window.innerWidth;
     let H = canvas.height = window.innerHeight;
-
-    const onResize = () => {
-      W = canvas.width  = window.innerWidth;
-      H = canvas.height = window.innerHeight;
-    };
+    const onResize = () => { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; };
     window.addEventListener("resize", onResize);
 
-    // Generate flowing chart lines
-    const LINES = 8;
-    const lines = Array.from({length: LINES}, (_, i) => {
-      const points = 120;
-      const baseY  = H * (0.15 + i * 0.1);
-      const amp    = 30 + Math.random() * 60;
-      const freq   = 0.008 + Math.random() * 0.012;
-      const speed  = 0.003 + Math.random() * 0.004;
-      const colors = ["#1e3a5f","#0d2545","#1a3a6b","#0f2a50","#162d4a","#0c2040","#1e3560","#0a1e3a"];
-      const accentChance = i < 2;
-      return { baseY, amp, freq, speed, phase: Math.random()*Math.PI*2, color: accentChance ? "#1e3a5f" : colors[i], accent: accentChance, points, prevY: Array(points).fill(baseY) };
-    });
+    // Subtle grid
+    const GRID_COLS = 16, GRID_ROWS = 10;
 
-    // Floating data particles
-    const PARTICLES = 60;
-    const particles = Array.from({length: PARTICLES}, () => ({
-      x: Math.random() * W,
-      y: Math.random() * H,
-      vx: (Math.random()-0.5)*0.4,
-      vy: (Math.random()-0.5)*0.4,
-      r: Math.random()*1.5+0.5,
-      alpha: Math.random()*0.4+0.1,
-      color: Math.random()>0.85 ? "#3b82f6" : Math.random()>0.7 ? "#0ea5e9" : "#1e3a5f",
+    // 3 slow flowing lines — violet accent
+    const lines = Array.from({length:3}, (_, i) => ({
+      baseY: H * (0.3 + i * 0.2),
+      amp:   20 + i * 15,
+      freq:  0.006 + i * 0.003,
+      speed: 0.0015 + i * 0.001,
+      phase: (Math.PI * 2 / 3) * i,
+      pts:   100,
     }));
 
-    // Grid lines
-    const GRID_COLS = 12, GRID_ROWS = 8;
+    // Sparse particles
+    const particles = Array.from({length:35}, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random()-0.5)*0.25, vy: (Math.random()-0.5)*0.25,
+      r: Math.random()*1.2+0.3,
+      a: Math.random()*0.25+0.05,
+      violet: Math.random() > 0.6,
+    }));
 
-    let t = 0;
     const draw = () => {
-      ctx.clearRect(0, 0, W, H);
+      ctx.clearRect(0,0,W,H);
 
-      // Deep background gradient
-      const bg = ctx.createRadialGradient(W*0.3, H*0.4, 0, W*0.5, H*0.5, W*0.8);
-      bg.addColorStop(0, "#080f1e");
-      bg.addColorStop(0.5, "#060c18");
-      bg.addColorStop(1, "#040810");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
+      // Background — pure dark
+      ctx.fillStyle = "#020510";
+      ctx.fillRect(0,0,W,H);
 
-      // Subtle grid
-      ctx.strokeStyle = "rgba(20,40,70,0.35)";
+      // Grid
+      ctx.strokeStyle = "rgba(129,140,248,0.05)";
       ctx.lineWidth = 0.5;
-      for (let c = 0; c <= GRID_COLS; c++) {
-        const x = (W / GRID_COLS) * c;
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-      }
-      for (let r = 0; r <= GRID_ROWS; r++) {
-        const y = (H / GRID_ROWS) * r;
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      }
+      for(let c=0;c<=GRID_COLS;c++){const x=(W/GRID_COLS)*c;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+      for(let r=0;r<=GRID_ROWS;r++){const y=(H/GRID_ROWS)*r;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
 
-      // Flowing chart lines
-      lines.forEach((line, li) => {
-        const step = W / line.points;
+      // Flowing lines
+      lines.forEach((ln, li) => {
+        const step = W / ln.pts;
         ctx.beginPath();
-        for (let p = 0; p < line.points; p++) {
+        for(let p=0;p<ln.pts;p++){
           const x = p * step;
-          const y = line.baseY + Math.sin(p * line.freq + t * line.speed + line.phase) * line.amp
-                  + Math.sin(p * line.freq * 2.3 + t * line.speed * 1.7) * line.amp * 0.3;
-          line.prevY[p] = y;
-          if (p === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          const y = ln.baseY + Math.sin(p*ln.freq + t.current*ln.speed + ln.phase)*ln.amp
+                             + Math.sin(p*ln.freq*1.8 + t.current*ln.speed*1.4)*ln.amp*0.25;
+          p===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
         }
-        const grad = ctx.createLinearGradient(0, 0, W, 0);
-        if (line.accent) {
-          grad.addColorStop(0, "rgba(30,58,95,0)");
-          grad.addColorStop(0.3, "rgba(59,130,246,0.15)");
-          grad.addColorStop(0.7, "rgba(14,165,233,0.2)");
-          grad.addColorStop(1, "rgba(30,58,95,0)");
-        } else {
-          grad.addColorStop(0, "rgba(15,30,60,0)");
-          grad.addColorStop(0.5, "rgba(20,45,80,0.12)");
-          grad.addColorStop(1, "rgba(15,30,60,0)");
-        }
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = line.accent ? 1.5 : 0.8;
+        const g = ctx.createLinearGradient(0,0,W,0);
+        g.addColorStop(0,   "rgba(129,140,248,0)");
+        g.addColorStop(0.3, `rgba(129,140,248,${0.08+li*0.04})`);
+        g.addColorStop(0.7, `rgba(167,139,250,${0.10+li*0.04})`);
+        g.addColorStop(1,   "rgba(129,140,248,0)");
+        ctx.strokeStyle = g;
+        ctx.lineWidth = 1;
         ctx.stroke();
-
-        // Area fill under accent lines
-        if (line.accent) {
-          ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
-          const fill = ctx.createLinearGradient(0, line.baseY - line.amp, 0, H);
-          fill.addColorStop(0, "rgba(59,130,246,0.04)");
-          fill.addColorStop(1, "rgba(59,130,246,0)");
-          ctx.fillStyle = fill;
-          ctx.fill();
-        }
-
-        // Animated dot on rightmost visible point (every 3rd line)
-        if (li % 3 === 0) {
-          const px = W - step;
-          const py = line.prevY[line.points - 1];
-          ctx.beginPath();
-          ctx.arc(px, py, 2.5, 0, Math.PI*2);
-          ctx.fillStyle = line.accent ? "rgba(96,165,250,0.8)" : "rgba(30,80,140,0.5)";
-          ctx.fill();
-        }
       });
 
-      // Floating particles
+      // Particles
       particles.forEach(p => {
         p.x += p.vx; p.y += p.vy;
-        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
-        if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-        ctx.fillStyle = p.color.replace(")", `,${p.alpha})`).replace("rgb(","rgba(").replace("#", "");
-        // simpler approach:
-        ctx.globalAlpha = p.alpha;
-        ctx.fillStyle = p.color;
-        ctx.fill();
+        if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0;
+        ctx.globalAlpha = p.a;
+        ctx.fillStyle = p.violet ? "#818cf8" : "#334155";
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
         ctx.globalAlpha = 1;
       });
 
-      // Vignette
-      const vig = ctx.createRadialGradient(W/2, H/2, H*0.2, W/2, H/2, H*0.9);
-      vig.addColorStop(0, "rgba(4,8,16,0)");
-      vig.addColorStop(1, "rgba(4,8,16,0.7)");
-      ctx.fillStyle = vig;
-      ctx.fillRect(0, 0, W, H);
+      // Soft vignette
+      const vig = ctx.createRadialGradient(W/2,H/2,H*0.25,W/2,H/2,H*0.85);
+      vig.addColorStop(0,"rgba(2,5,16,0)");
+      vig.addColorStop(1,"rgba(2,5,16,0.65)");
+      ctx.fillStyle = vig; ctx.fillRect(0,0,W,H);
 
-      t++;
+      t.current++;
       raf = requestAnimationFrame(draw);
     };
     draw();
@@ -4922,138 +4869,132 @@ function LoginScreen({onLogin}) {
   };
 
   const inputStyle = (field) => ({
-    width:"100%", background:"rgba(7,12,23,0.8)",
-    border:"1px solid "+(err?"rgba(248,113,113,0.6)":focused===field?"rgba(59,130,246,0.6)":"rgba(30,45,69,0.8)"),
-    borderRadius:10, padding:"12px 16px", color:"#e2e8f0", fontSize:13, outline:"none",
-    fontFamily:"'DM Sans',sans-serif", marginBottom:14, boxSizing:"border-box",
-    transition:"border-color 0.2s, box-shadow 0.2s",
-    boxShadow: focused===field?"0 0 0 3px rgba(59,130,246,0.1)":"none",
+    width:"100%", background:"rgba(5,6,15,0.7)",
+    border:`1px solid ${err?"rgba(248,113,113,0.5)":focused===field?"rgba(129,140,248,0.5)":"rgba(30,40,60,0.8)"}`,
+    borderRadius:8, padding:"11px 14px", color:"#e2e8f0", fontSize:13, outline:"none",
+    fontFamily:"'DM Sans',sans-serif", marginBottom:12, boxSizing:"border-box",
+    transition:"border-color 0.18s, box-shadow 0.18s",
+    boxShadow: focused===field ? "0 0 0 3px rgba(129,140,248,0.08)" : "none",
   });
 
   return (
-    <div style={{position:"relative",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+    <div style={{position:"relative",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",background:"#020510"}}>
       <canvas ref={canvasRef} style={{position:"absolute",inset:0,width:"100%",height:"100%"}}/>
 
-      {/* Ambient glow behind card */}
-      <div style={{position:"absolute",width:500,height:500,borderRadius:"50%",
-        background:"radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%)",
-        pointerEvents:"none",zIndex:1}}/>
+      {/* Violet ambient glow behind card */}
+      <div style={{position:"absolute",width:480,height:380,borderRadius:"50%",
+        background:"radial-gradient(ellipse, rgba(129,140,248,0.07) 0%, transparent 70%)",
+        pointerEvents:"none",zIndex:1,filter:"blur(20px)"}}/>
 
       {/* Login card */}
       <div style={{
         position:"relative", zIndex:2, width:360,
-        background:"rgba(10,16,28,0.85)",
-        backdropFilter:"blur(20px)",
-        WebkitBackdropFilter:"blur(20px)",
-        border:"1px solid rgba(30,58,95,0.6)",
-        borderRadius:20,
-        boxShadow:"0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(59,130,246,0.05), inset 0 1px 0 rgba(255,255,255,0.04)",
-        padding:"44px 40px 36px",
-        animation:"cardIn 0.6s cubic-bezier(0.16,1,0.3,1) forwards",
+        background:"rgba(8,10,20,0.82)",
+        backdropFilter:"blur(24px)",
+        WebkitBackdropFilter:"blur(24px)",
+        border:"1px solid rgba(129,140,248,0.15)",
+        borderRadius:16,
+        boxShadow:"0 24px 64px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.04)",
+        padding:"40px 36px 32px",
+        animation:"cardIn 0.5s cubic-bezier(0.16,1,0.3,1) forwards",
       }}>
         <style>{`
           @keyframes cardIn {
-            from { opacity:0; transform:translateY(24px) scale(0.97); }
-            to   { opacity:1; transform:translateY(0) scale(1); }
+            from { opacity:0; transform:translateY(20px); }
+            to   { opacity:1; transform:translateY(0); }
           }
           @keyframes shake {
             0%,100%{transform:translateX(0)}
-            20%{transform:translateX(-8px)}
-            40%{transform:translateX(8px)}
-            60%{transform:translateX(-5px)}
-            80%{transform:translateX(5px)}
+            25%{transform:translateX(-6px)}
+            75%{transform:translateX(6px)}
           }
-          @keyframes spin {
-            to { transform:rotate(360deg); }
-          }
-          @keyframes successPulse {
-            0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
-            100% { box-shadow: 0 0 0 16px rgba(34,197,94,0); }
-          }
-          .login-card-inner { animation: ${err?"shake 0.4s ease":"none"}; }
+          @keyframes spin { to { transform:rotate(360deg); } }
+          .login-inner { animation: ${err?"shake 0.35s ease":"none"}; }
         `}</style>
 
-        <div className="login-card-inner">
+        <div className="login-inner">
+
           {/* Logo */}
-          <div style={{textAlign:"center",marginBottom:32}}>
-            <svg viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg" style={{width:160,marginBottom:14}}>
-                  <text x="0" y="30" fontFamily="'DM Mono',monospace" fontSize="26" fontWeight="700" fill="white" opacity="0.95">targetdash</text>
-                  <text x="162" y="30" fontFamily="'DM Mono',monospace" fontSize="26" fontWeight="700" fill={ACCENT}>›</text>
-                </svg>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              <div style={{width:6,height:6,borderRadius:"50%",background:ACCENT,boxShadow:`0 0 8px ${ACCENT}`}}/>
-              <span style={{fontSize:12,color:"rgba(96,165,250,0.8)",fontFamily:"'DM Mono',monospace",letterSpacing:"0.06em"}}>
-                {CLIENT_NAME}
-              </span>
-            </div>
+          <div style={{textAlign:"center",marginBottom:36}}>
+            <svg viewBox="0 0 220 38" xmlns="http://www.w3.org/2000/svg" style={{width:154,display:"inline-block",marginBottom:12}}>
+              <text x="0" y="28" fontFamily="'DM Mono',monospace" fontSize="25" fontWeight="700" fill="white" opacity="0.92">targetdash</text>
+              <text x="158" y="28" fontFamily="'DM Mono',monospace" fontSize="25" fontWeight="700" fill={ACCENT}>›</text>
+            </svg>
+            {CLIENT_NAME && (
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                <div style={{width:5,height:5,borderRadius:"50%",background:ACCENT,opacity:0.8}}/>
+                <span style={{fontSize:11,color:"rgba(148,163,184,0.7)",fontFamily:"'DM Mono',monospace",letterSpacing:"0.05em"}}>
+                  {CLIENT_NAME}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Fields */}
-          <div style={{marginBottom:6}}>
-            <div style={{fontSize:10,color:"rgba(100,116,139,0.8)",fontFamily:"'DM Mono',monospace",
-              textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Username</div>
+          <div style={{marginBottom:4}}>
+            <div style={{fontSize:10,color:"rgba(100,116,139,0.7)",fontFamily:"'DM Mono',monospace",
+              textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Email</div>
             <input type="text" value={user} onChange={e=>setUser(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Email address"
+              onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="name@company.com"
               onFocus={()=>setFocused("user")} onBlur={()=>setFocused(null)}
               autoComplete="off" style={inputStyle("user")}/>
           </div>
 
-          <div style={{marginBottom:20}}>
-            <div style={{fontSize:10,color:"rgba(100,116,139,0.8)",fontFamily:"'DM Mono',monospace",
-              textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Password</div>
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:10,color:"rgba(100,116,139,0.7)",fontFamily:"'DM Mono',monospace",
+              textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Password</div>
             <input type="password" value={pw} onChange={e=>setPw(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Enter password"
+              onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="••••••••"
               onFocus={()=>setFocused("pw")} onBlur={()=>setFocused(null)}
               style={inputStyle("pw")}/>
           </div>
 
-          {/* Submit button */}
+          {/* Button */}
           <button onClick={submit}
             style={{
-              width:"100%", padding:"13px",
+              width:"100%", padding:"12px",
               background: success
-                ? "linear-gradient(135deg,#16a34a,#22c55e)"
+                ? "rgba(34,197,94,0.15)"
                 : loading
-                ? "rgba(30,58,95,0.6)"
-                : `linear-gradient(135deg, #1d4ed8, #0ea5e9)`,
-              border:"none", borderRadius:11,
-              color: success||loading ? "#fff" : "#fff",
-              fontWeight:700, fontSize:13, cursor: loading||success?"default":"pointer",
-              fontFamily:"'DM Sans',sans-serif",
-              transition:"all 0.3s",
-              boxShadow: success
-                ? "0 0 0 0 rgba(34,197,94,0.4), 0 8px 24px rgba(22,163,74,0.3)"
-                : loading ? "none"
-                : "0 8px 24px rgba(29,78,216,0.3)",
-              animation: success ? "successPulse 0.6s ease" : "none",
+                ? "rgba(129,140,248,0.1)"
+                : "rgba(129,140,248,0.12)",
+              border:`1px solid ${success?"rgba(34,197,94,0.4)":loading?"rgba(129,140,248,0.2)":"rgba(129,140,248,0.3)"}`,
+              borderRadius:8,
+              color: success ? "#4ade80" : "#a5b4fc",
+              fontWeight:600, fontSize:13, cursor: loading||success?"default":"pointer",
+              fontFamily:"'DM Mono',monospace",
+              transition:"all 0.2s",
               display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-            }}>
+              letterSpacing:"0.03em",
+            }}
+            onMouseEnter={e=>{if(!loading&&!success){e.currentTarget.style.background="rgba(129,140,248,0.18)";e.currentTarget.style.borderColor="rgba(129,140,248,0.5)";}}}
+            onMouseLeave={e=>{if(!loading&&!success){e.currentTarget.style.background="rgba(129,140,248,0.12)";e.currentTarget.style.borderColor="rgba(129,140,248,0.3)";}}}
+          >
             {loading && !success && (
-              <div style={{width:14,height:14,border:"2px solid rgba(255,255,255,0.3)",
-                borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+              <div style={{width:12,height:12,border:"1.5px solid rgba(165,180,252,0.3)",
+                borderTopColor:"#a5b4fc",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
             )}
-            {success ? "✓ Welcome" : loading ? "Signing in…" : "Sign in →"}
+            {success ? "✓  Access granted" : loading ? "Signing in…" : "Sign in →"}
           </button>
 
           {err && (
-            <div style={{marginTop:12,textAlign:"center",fontSize:11,color:"rgba(248,113,113,0.9)",
-              fontFamily:"'DM Mono',monospace",animation:"cardIn 0.2s ease"}}>
-              Incorrect username or password
+            <div style={{marginTop:10,textAlign:"center",fontSize:11,
+              color:"rgba(248,113,113,0.8)",fontFamily:"'DM Mono',monospace"}}>
+              Incorrect credentials
             </div>
           )}
 
           {/* Footer */}
-          <div style={{marginTop:24,paddingTop:18,borderTop:"1px solid rgba(15,30,48,0.8)",
+          <div style={{marginTop:28,paddingTop:16,borderTop:"1px solid rgba(129,140,248,0.08)",
             display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            <div style={{width:5,height:5,borderRadius:"50%",background:"#22c55e",
-              boxShadow:"0 0 6px #22c55e"}}/>
-            <span style={{fontSize:10,color:"rgba(100,116,139,0.6)",fontFamily:"'DM Mono',monospace"}}>
+            <div style={{width:4,height:4,borderRadius:"50%",background:"#22c55e",opacity:0.7}}/>
+            <span style={{fontSize:10,color:"rgba(100,116,139,0.4)",fontFamily:"'DM Mono',monospace"}}>
               targetdash › v3
             </span>
           </div>
+
         </div>
       </div>
-
     </div>
   );
 }
