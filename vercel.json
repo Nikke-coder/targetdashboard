@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/sync-fx",
+      "schedule": "0 16 * * 1-5"
+    }
+  ]
+}
