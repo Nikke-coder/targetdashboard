@@ -5611,27 +5611,45 @@ function MfaEnrollScreen({onDone}) {
   );
 }
 
+function LoginPage() {
+  const [loading, setLoading] = React.useState(false);
+
+  const signIn = async () => {
+    setLoading(true);
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: 'https://app.targetdash.ai' }
+    });
+  };
+
+  return (
+    <div style={{minHeight:'100vh',background:'#0e0c18',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{textAlign:'center'}}>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:28,fontWeight:700,color:'#f0ecff',marginBottom:8,letterSpacing:'-.02em'}}>
+          targetdash<span style={{color:'#7c3aed'}}>›</span>
+        </div>
+        <div style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:'#5a5580',marginBottom:40}}>financial intelligence</div>
+        <button onClick={signIn} disabled={loading}
+          style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'13px 32px',
+            fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:600,cursor:loading?'wait':'pointer',
+            opacity:loading?0.7:1,transition:'opacity .2s'}}>
+          {loading ? 'Signing in…' : 'Sign in with Google →'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AppWithAuth() {
-  const [ready, setReady] = React.useState(false);
+  const [state, setState] = React.useState('loading'); // loading | login | ready
   const [companyName, setCompanyName] = React.useState('Dashboard');
 
   React.useEffect(() => {
-    async function boot() {
-      // If hash contains tokens, wait for Supabase to process them
-      if(window.location.hash.includes('access_token')) {
-        await new Promise(r => setTimeout(r, 2000));
-        window.history.replaceState(null, '', window.location.pathname);
-      }
-
-      let session = null;
-      for(let i = 0; i < 5; i++) {
-        const { data } = await supabase.auth.getSession();
-        if(data?.session) { session = data.session; break; }
-        await new Promise(r => setTimeout(r, 500));
-      }
+    async function check() {
+      const { data: { session } } = await supabase.auth.getSession();
 
       if(!session) {
-        window.location.href = 'https://www.targetdash.ai/login';
+        setState('login');
         return;
       }
 
@@ -5642,11 +5660,10 @@ function AppWithAuth() {
 
       const plan = profile?.plan;
 
-      // Superuser — always in, no checks
       if(plan === 'superuser') {
         CLIENT_NAME = profile?.company_name || 'targetdash HQ';
         setCompanyName(CLIENT_NAME);
-        setReady(true);
+        setState('ready');
         return;
       }
 
@@ -5655,6 +5672,7 @@ function AppWithAuth() {
         window.location.href = `https://www.targetdash.ai/onboarding?mode=${mode}`;
         return;
       }
+
       if(plan !== 'mainuser') {
         window.location.href = 'https://www.targetdash.ai/getstarted';
         return;
@@ -5662,16 +5680,25 @@ function AppWithAuth() {
 
       CLIENT_NAME = profile?.company_name || 'Dashboard';
       setCompanyName(CLIENT_NAME);
-      setReady(true);
+      setState('ready');
     }
-    boot();
+
+    // Listen for OAuth callback
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if(event === 'SIGNED_IN') check();
+    });
+
+    check();
+    return () => subscription.unsubscribe();
   }, []);
 
-  if(!ready) return (
+  if(state === 'loading') return (
     <div style={{minHeight:"100vh",background:"#0e0c18",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{color:"#8a85a8",fontSize:13,fontFamily:"'DM Mono',monospace"}}>Loading…</div>
+      <div style={{color:"#5a5580",fontSize:13,fontFamily:"'DM Mono',monospace"}}>Loading…</div>
     </div>
   );
+
+  if(state === 'login') return <LoginPage />;
 
   return <Dashboard companyName={companyName}/>;
 }
