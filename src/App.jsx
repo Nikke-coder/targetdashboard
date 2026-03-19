@@ -5616,14 +5616,7 @@ function AppWithAuth() {
   const [companyName, setCompanyName] = React.useState('Dashboard');
 
   React.useEffect(() => {
-    (async () => {
-      // If coming from admin via URL hash tokens, wait for Supabase to process
-      if(window.location.hash.includes('access_token')) {
-        await new Promise(r => setTimeout(r, 1500));
-        window.history.replaceState(null, '', window.location.pathname);
-      }
-
-      const {data:{session}} = await supabase.auth.getSession();
+    async function boot(session) {
       if(!session) {
         window.location.href = 'https://www.targetdash.ai/login';
         return;
@@ -5640,12 +5633,13 @@ function AppWithAuth() {
       if(plan === 'superuser') {
         CLIENT_NAME = profile?.company_name || 'targetdash HQ';
         setCompanyName(CLIENT_NAME);
+        // Clear hash from URL cleanly
+        if(window.location.hash) window.history.replaceState(null,'',window.location.pathname);
         setReady(true);
         return;
       }
 
       if(!profile?.onboarded) {
-        // Invited users (mainuser plan but not yet onboarded) go to invite onboarding
         const mode = (plan === 'mainuser') ? 'invite' : 'subscribe';
         window.location.href = `https://www.targetdash.ai/onboarding?mode=${mode}`;
         return;
@@ -5655,11 +5649,27 @@ function AppWithAuth() {
         return;
       }
 
-      const name = profile?.company_name || 'Dashboard';
-      CLIENT_NAME = name;
-      setCompanyName(name);
+      CLIENT_NAME = profile?.company_name || 'Dashboard';
+      setCompanyName(CLIENT_NAME);
+      if(window.location.hash) window.history.replaceState(null,'',window.location.pathname);
       setReady(true);
-    })();
+    }
+
+    // Listen for auth changes — this fires when hash tokens are processed
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if(event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        boot(session);
+      }
+    });
+
+    // Also check existing session (direct visit, not hash redirect)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if(session && !window.location.hash.includes('access_token')) {
+        boot(session);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   if(!ready) return (
