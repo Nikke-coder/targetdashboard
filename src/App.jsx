@@ -5617,18 +5617,21 @@ function AppWithAuth() {
 
   React.useEffect(() => {
     (async () => {
+      // If coming from admin via URL hash tokens, let Supabase process them first
+      if(window.location.hash.includes('access_token')) {
+        await new Promise(r => setTimeout(r, 800));
+      }
+
       const {data:{session}} = await supabase.auth.getSession();
       if(!session) {
         window.location.href = 'https://www.targetdash.ai/login';
         return;
       }
-      // Load company name and check plan
       const {data:profile} = await supabase.from('user_profiles')
         .select('company_name, plan, onboarded')
         .eq('user_id', session.user.id)
         .maybeSingle();
 
-      // Not onboarded or not paying → redirect
       if(!profile?.onboarded) {
         window.location.href = 'https://www.targetdash.ai/onboarding?mode=subscribe';
         return;
