@@ -5641,13 +5641,11 @@ function LoginPage() {
 }
 
 function AppWithAuth() {
-  const [state, setState] = React.useState('loading'); // loading | login | ready
+  const [state, setState] = React.useState('loading');
   const [companyName, setCompanyName] = React.useState('Dashboard');
 
   React.useEffect(() => {
-    async function check() {
-      const { data: { session } } = await supabase.auth.getSession();
-
+    async function check(session) {
       if(!session) {
         setState('login');
         return;
@@ -5666,29 +5664,28 @@ function AppWithAuth() {
         setState('ready');
         return;
       }
-
       if(!profile?.onboarded) {
         const mode = plan === 'mainuser' ? 'invite' : 'subscribe';
         window.location.href = `https://www.targetdash.ai/onboarding?mode=${mode}`;
         return;
       }
-
       if(plan !== 'mainuser') {
         window.location.href = 'https://www.targetdash.ai/getstarted';
         return;
       }
-
       CLIENT_NAME = profile?.company_name || 'Dashboard';
       setCompanyName(CLIENT_NAME);
       setState('ready');
     }
 
-    // Listen for OAuth callback
+    // onAuthStateChange is the single source of truth — handles both
+    // initial load (INITIAL_SESSION) and OAuth callback (SIGNED_IN)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if(event === 'SIGNED_IN') check();
+      if(event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        check(session);
+      }
     });
 
-    check();
     return () => subscription.unsubscribe();
   }, []);
 
