@@ -5617,9 +5617,10 @@ function AppWithAuth() {
 
   React.useEffect(() => {
     (async () => {
-      // If coming from admin via URL hash tokens, let Supabase process them first
+      // If coming from admin via URL hash tokens, wait for Supabase to process
       if(window.location.hash.includes('access_token')) {
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 1500));
+        window.history.replaceState(null, '', window.location.pathname);
       }
 
       const {data:{session}} = await supabase.auth.getSession();
@@ -5627,16 +5628,29 @@ function AppWithAuth() {
         window.location.href = 'https://www.targetdash.ai/login';
         return;
       }
+
       const {data:profile} = await supabase.from('user_profiles')
         .select('company_name, plan, onboarded')
         .eq('user_id', session.user.id)
         .maybeSingle();
 
-      if(!profile?.onboarded) {
-        window.location.href = 'https://www.targetdash.ai/onboarding?mode=subscribe';
+      const plan = profile?.plan;
+
+      // Superuser — always allowed, skip all checks
+      if(plan === 'superuser') {
+        CLIENT_NAME = profile?.company_name || 'targetdash HQ';
+        setCompanyName(CLIENT_NAME);
+        setReady(true);
         return;
       }
-      if(profile?.plan !== 'mainuser' && profile?.plan !== 'superuser') {
+
+      if(!profile?.onboarded) {
+        // Invited users (mainuser plan but not yet onboarded) go to invite onboarding
+        const mode = (plan === 'mainuser') ? 'invite' : 'subscribe';
+        window.location.href = `https://www.targetdash.ai/onboarding?mode=${mode}`;
+        return;
+      }
+      if(plan !== 'mainuser') {
         window.location.href = 'https://www.targetdash.ai/getstarted';
         return;
       }
