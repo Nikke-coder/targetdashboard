@@ -5616,31 +5616,42 @@ function AppWithAuth() {
   const [companyName, setCompanyName] = React.useState('Dashboard');
 
   React.useEffect(() => {
-    async function boot(session) {
+    async function boot() {
+      // If hash contains tokens, wait for Supabase to process them
+      if(window.location.hash.includes('access_token')) {
+        await new Promise(r => setTimeout(r, 2000));
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+      let session = null;
+      for(let i = 0; i < 5; i++) {
+        const { data } = await supabase.auth.getSession();
+        if(data?.session) { session = data.session; break; }
+        await new Promise(r => setTimeout(r, 500));
+      }
+
       if(!session) {
         window.location.href = 'https://www.targetdash.ai/login';
         return;
       }
 
-      const {data:profile} = await supabase.from('user_profiles')
+      const { data: profile } = await supabase.from('user_profiles')
         .select('company_name, plan, onboarded')
         .eq('user_id', session.user.id)
         .maybeSingle();
 
       const plan = profile?.plan;
 
-      // Superuser — always allowed, skip all checks
+      // Superuser — always in, no checks
       if(plan === 'superuser') {
         CLIENT_NAME = profile?.company_name || 'targetdash HQ';
         setCompanyName(CLIENT_NAME);
-        // Clear hash from URL cleanly
-        if(window.location.hash) window.history.replaceState(null,'',window.location.pathname);
         setReady(true);
         return;
       }
 
       if(!profile?.onboarded) {
-        const mode = (plan === 'mainuser') ? 'invite' : 'subscribe';
+        const mode = plan === 'mainuser' ? 'invite' : 'subscribe';
         window.location.href = `https://www.targetdash.ai/onboarding?mode=${mode}`;
         return;
       }
@@ -5651,25 +5662,9 @@ function AppWithAuth() {
 
       CLIENT_NAME = profile?.company_name || 'Dashboard';
       setCompanyName(CLIENT_NAME);
-      if(window.location.hash) window.history.replaceState(null,'',window.location.pathname);
       setReady(true);
     }
-
-    // Listen for auth changes — this fires when hash tokens are processed
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if(event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        boot(session);
-      }
-    });
-
-    // Also check existing session (direct visit, not hash redirect)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if(session && !window.location.hash.includes('access_token')) {
-        boot(session);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    boot();
   }, []);
 
   if(!ready) return (
