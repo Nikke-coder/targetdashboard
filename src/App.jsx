@@ -5674,6 +5674,11 @@ function AppWithAuth() {
 
       const plan = profile?.plan;
 
+      // Superuser without impersonation → send to admin
+      if(plan === 'superuser' && !adminClient) {
+        window.location.href = 'https://admin.targetdash.ai'; return;
+      }
+
       if(!profile?.onboarded) {
         const mode = plan === 'mainuser' ? 'invite' : 'subscribe';
         window.location.href = `https://www.targetdash.ai/onboarding?mode=${mode}`;
