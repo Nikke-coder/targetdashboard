@@ -10,3 +10,4 @@ export const supabase = createClient(URL, KEY, {
     autoRefreshToken: true,
   }
 })
+export const CLIENT = 'demo'
