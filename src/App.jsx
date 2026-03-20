@@ -5646,9 +5646,25 @@ function AppWithAuth() {
 
   React.useEffect(() => {
     async function check(session) {
-      if(!session) {
-        setState('login');
-        return;
+      if(!session) { setState('login'); return; }
+
+      // ── ADMIN IMPERSONATION ──
+      // When opened from admin.targetdash.ai with ?admin_client=uid&admin_name=xxx
+      const params = new URLSearchParams(window.location.search);
+      const adminClient = params.get('admin_client');
+      const adminName   = params.get('admin_name');
+      if(adminClient && adminName) {
+        // Verify the opener is actually a superuser
+        const { data: me } = await supabase.from('user_profiles')
+          .select('plan').eq('user_id', session.user.id).maybeSingle();
+        if(me?.plan === 'superuser') {
+          CLIENT_NAME = decodeURIComponent(adminName);
+          setCompanyName(CLIENT_NAME);
+          // Clear params from URL
+          window.history.replaceState(null,'',window.location.pathname);
+          setState('ready');
+          return;
+        }
       }
 
       const { data: profile } = await supabase.from('user_profiles')
@@ -5658,12 +5674,6 @@ function AppWithAuth() {
 
       const plan = profile?.plan;
 
-      if(plan === 'superuser') {
-        CLIENT_NAME = profile?.company_name || 'targetdash HQ';
-        setCompanyName(CLIENT_NAME);
-        setState('ready');
-        return;
-      }
       if(!profile?.onboarded) {
         const mode = plan === 'mainuser' ? 'invite' : 'subscribe';
         window.location.href = `https://www.targetdash.ai/onboarding?mode=${mode}`;
@@ -5673,19 +5683,15 @@ function AppWithAuth() {
         window.location.href = 'https://www.targetdash.ai/getstarted';
         return;
       }
+
       CLIENT_NAME = profile?.company_name || 'Dashboard';
       setCompanyName(CLIENT_NAME);
       setState('ready');
     }
 
-    // onAuthStateChange is the single source of truth — handles both
-    // initial load (INITIAL_SESSION) and OAuth callback (SIGNED_IN)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if(event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-        check(session);
-      }
+      if(event === 'INITIAL_SESSION' || event === 'SIGNED_IN') check(session);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
