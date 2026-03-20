@@ -5648,19 +5648,16 @@ function AppWithAuth() {
     async function check(session) {
       if(!session) { setState('login'); return; }
 
-      // ── ADMIN IMPERSONATION ──
-      // When opened from admin.targetdash.ai with ?admin_client=uid&admin_name=xxx
+      // Admin impersonation — opened from admin.targetdash.ai
       const params = new URLSearchParams(window.location.search);
       const adminClient = params.get('admin_client');
       const adminName   = params.get('admin_name');
       if(adminClient && adminName) {
-        // Verify the opener is actually a superuser
         const { data: me } = await supabase.from('user_profiles')
           .select('plan').eq('user_id', session.user.id).maybeSingle();
         if(me?.plan === 'superuser') {
           CLIENT_NAME = decodeURIComponent(adminName);
           setCompanyName(CLIENT_NAME);
-          // Clear params from URL
           window.history.replaceState(null,'',window.location.pathname);
           setState('ready');
           return;
@@ -5674,9 +5671,12 @@ function AppWithAuth() {
 
       const plan = profile?.plan;
 
-      // Superuser without impersonation → send to admin
-      if(plan === 'superuser' && !adminClient) {
-        window.location.href = 'https://admin.targetdash.ai'; return;
+      // Superuser always gets the dashboard
+      if(plan === 'superuser') {
+        CLIENT_NAME = profile?.company_name || 'targetdash';
+        setCompanyName(CLIENT_NAME);
+        setState('ready');
+        return;
       }
 
       if(!profile?.onboarded) {
