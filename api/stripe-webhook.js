@@ -4,7 +4,6 @@ const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const SUPABASE_URL          = process.env.SUPABASE_URL || 'https://nghlvfngpfrhhigkoeem.supabase.co';
 const SUPABASE_SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 
-// ── Read raw body from Node.js req ──
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -14,7 +13,6 @@ function readBody(req) {
   });
 }
 
-// ── HMAC signature verification ──
 async function verifyStripeSignature(payload, signature, secret) {
   const parts = signature.split(',').reduce((acc, part) => {
     const [key, val] = part.split('=');
@@ -33,41 +31,71 @@ async function verifyStripeSignature(payload, signature, secret) {
   return expected === sig;
 }
 
-// ── Supabase helpers ──
-async function sbPost(path, body) {
-  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_SERVICE_KEY,
-      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal,resolution=merge-duplicates',
-    },
-    body: JSON.stringify(body),
-  });
-}
+// ── Supabase REST helpers ──
+const headers = () => ({
+  'apikey': SUPABASE_SERVICE_KEY,
+  'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=minimal',
+});
 
 async function sbGet(path) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` }
-  });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: headers() });
   return res.json();
 }
 
-async function sbPatch(path, body) {
-  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    method: 'PATCH',
-    headers: {
-      'apikey': SUPABASE_SERVICE_KEY,
-      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify(body),
+async function sbInsert(table, body) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST', headers: headers(), body: JSON.stringify(body),
   });
 }
 
-// ── Main handler (Vercel Node.js style) ──
+async function sbUpdate(path, body) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method: 'PATCH', headers: headers(), body: JSON.stringify(body),
+  });
+}
+
+// ── Add credits reliably: SELECT → UPDATE or INSERT ──
+async function addCredits(userEmail, client, amount) {
+  const existing = await sbGet(`ai_credits?user_email=eq.${encodeURIComponent(userEmail)}&select=id,balance,unlimited`);
+
+  if (existing && existing.length > 0) {
+    // Row exists — UPDATE balance
+    const row = existing[0];
+    const newBal = row.unlimited ? row.balance : (row.balance || 0) + amount;
+    await sbUpdate(`ai_credits?user_email=eq.${encodeURIComponent(userEmail)}`, {
+      balance: newBal,
+      updated_at: new Date().toISOString(),
+    });
+    return newBal;
+  } else {
+    // No row — check if there's a row without user_email for this client
+    const byClient = await sbGet(`ai_credits?client=eq.${encodeURIComponent(client)}&user_email=is.null&select=id,balance`);
+    if (byClient && byClient.length > 0) {
+      // Found orphan row — claim it and add credits
+      const row = byClient[0];
+      const newBal = (row.balance || 0) + amount;
+      await sbUpdate(`ai_credits?id=eq.${row.id}`, {
+        user_email: userEmail,
+        balance: newBal,
+        updated_at: new Date().toISOString(),
+      });
+      return newBal;
+    } else {
+      // No row at all — INSERT new
+      await sbInsert('ai_credits', {
+        user_email: userEmail,
+        client: client,
+        balance: amount,
+        updated_at: new Date().toISOString(),
+      });
+      return amount;
+    }
+  }
+}
+
+// ── Main handler ──
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
@@ -84,19 +112,18 @@ export default async function handler(req, res) {
   const event = JSON.parse(payload);
 
   try {
-    // ── checkout.session.completed ──
     if (event.type === 'checkout.session.completed') {
-      const session    = event.data.object;
-      const sessionId  = session.id;
-      const user_email = session.metadata?.user_email;
-      const metaType   = session.metadata?.type;
-      const user_id    = session.metadata?.user_id;
+      const session     = event.data.object;
+      const sessionId   = session.id;
+      const user_email  = session.metadata?.user_email;
+      const metaType    = session.metadata?.type;
+      const user_id     = session.metadata?.user_id;
       const customer_id = session.customer;
-      const sub_id     = session.subscription;
+      const sub_id      = session.subscription;
 
       if (!user_email) return res.status(400).send('No user email');
 
-      // ── Idempotency check ──
+      // Idempotency check
       try {
         const existing = await sbGet(`ai_transactions?stripe_session_id=eq.${sessionId}&select=id&limit=1`);
         if (existing && existing.length > 0) return res.status(200).send('Already processed');
@@ -105,26 +132,22 @@ export default async function handler(req, res) {
       // ── CREDIT PACKAGE PURCHASE ──
       if (metaType === 'credits') {
         const packageName = session.metadata?.package;
-        const credits = parseInt(session.metadata?.credits) || 0;
+        const credits     = parseInt(session.metadata?.credits) || 0;
         if (credits <= 0) return res.status(400).send('Invalid credits');
 
-        const balData = await sbGet(`ai_credits?user_email=eq.${encodeURIComponent(user_email)}&select=balance,unlimited`);
-        const currentBal = balData?.[0]?.balance ?? 0;
-        const isUnlimited = balData?.[0]?.unlimited ?? false;
-        const newBal = isUnlimited ? currentBal : currentBal + credits;
+        const clientName = session.metadata?.company_name || user_email;
 
-        await sbPost('ai_credits?on_conflict=user_email', {
-          user_email, balance: newBal, updated_at: new Date().toISOString(),
-        });
+        // Add credits using reliable SELECT → UPDATE/INSERT
+        await addCredits(user_email, clientName, credits);
 
-        await sbPost('ai_transactions', {
+        // Record transaction
+        await sbInsert('ai_transactions', {
           user_email,
-          client: session.metadata?.company_name || user_email,
+          client: clientName,
           credits,
           type: 'purchase',
           package: packageName,
           stripe_session_id: sessionId,
-          receipt_url: session.receipt_url || null,
           created_at: new Date().toISOString(),
         });
 
@@ -134,7 +157,7 @@ export default async function handler(req, res) {
       // ── SUBSCRIPTION PAYMENT ──
       const query = user_id ? `user_id=eq.${user_id}` : `email=eq.${encodeURIComponent(user_email)}`;
 
-      await sbPatch(`user_profiles?${query}`, {
+      await sbUpdate(`user_profiles?${query}`, {
         plan: 'mainuser',
         stripe_customer_id: customer_id,
         stripe_sub_id: sub_id,
@@ -142,13 +165,13 @@ export default async function handler(req, res) {
         onboarded: true,
       });
 
-      await sbPost('ai_credits?on_conflict=user_email', {
-        user_email, balance: 100, updated_at: new Date().toISOString(),
-      });
+      // Grant 100 initial credits
+      const clientName = session.metadata?.company_name || user_email;
+      await addCredits(user_email, clientName, 100);
 
-      await sbPost('ai_transactions', {
+      await sbInsert('ai_transactions', {
         user_email,
-        client: session.metadata?.company_name || user_email,
+        client: clientName,
         credits: 100,
         type: 'purchase',
         package: 'subscription_initial',
@@ -157,10 +180,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // ── customer.subscription.deleted ──
     if (event.type === 'customer.subscription.deleted') {
       const customer_id = event.data.object.customer;
-      await sbPatch(`user_profiles?stripe_customer_id=eq.${customer_id}`, {
+      await sbUpdate(`user_profiles?stripe_customer_id=eq.${customer_id}`, {
         plan: 'cancelled',
       });
     }
