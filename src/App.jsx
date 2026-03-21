@@ -332,10 +332,10 @@ const Gauge = ({label,value,unit,target,targetLabel,color,desc,flip}) => {
 
 const TblHead = ({visMonths,monthTypes,totalLabel,stickyBg,simple,compLabel="BUD"}) => {
   if(simple) return (
-    <thead><tr style={{borderBottom:"1px solid #1e2d45",background:T.bgRow}}>
+    <thead><tr style={{borderBottom:"1px solid "+T.border,background:T.bgRow}}>
       <th style={{textAlign:"left",padding:"10px 20px",color:SLATE,fontWeight:500,minWidth:190,position:"sticky",left:0,background:stickyBg||T.bgCard,zIndex:2}}>Line Item</th>
       {visMonths.map((m,i)=>(<th key={i} style={{padding:"8px 10px",fontWeight:600,fontSize:10,textAlign:"right",color:monthTypes[i]==="ACT"?T.accentHi:AMBER,whiteSpace:"nowrap",minWidth:80}}>{m}</th>))}
-      <th style={{padding:"8px 10px",fontWeight:600,fontSize:10,textAlign:"right",color:T.textMuted,minWidth:90,borderLeft:"1px solid #1e2d45"}}>{totalLabel||"Total"}</th>
+      <th style={{padding:"8px 10px",fontWeight:600,fontSize:10,textAlign:"right",color:T.textMuted,minWidth:90,borderLeft:"1px solid "+T.border}}>{totalLabel||"Total"}</th>
     </tr></thead>
   );
   const bg = stickyBg||T.bgCard;
@@ -348,11 +348,11 @@ const TblHead = ({visMonths,monthTypes,totalLabel,stickyBg,simple,compLabel="BUD
         ))}
         <th colSpan={3} style={{padding:"8px 10px",fontWeight:600,fontSize:10,textAlign:"center",color:T.textMuted,minWidth:130}}>{totalLabel||"Total"}</th>
       </tr>
-      <tr style={{borderBottom:"1px solid #1e2d45",background:T.bgRow}}>
+      <tr style={{borderBottom:"1px solid "+T.border,background:T.bgRow}}>
         <th style={{position:"sticky",left:0,background:T.bgRow,zIndex:2}}></th>
         {visMonths.map((_,i) => [
           <th key={"a"+i} style={{padding:"4px 8px",fontSize:9,fontWeight:600,textAlign:"right",color:monthTypes[i]==="ACT"?BLUE:AMBER,background:T.bgRow,letterSpacing:"0.05em"}}>{monthTypes[i]==="ACT"?"ACT":compLabel}</th>,
-          <th key={"c"+i} style={{padding:"4px 8px",fontSize:9,fontWeight:600,textAlign:"right",color:AMBER,background:"#0d0a00",letterSpacing:"0.05em",opacity: monthTypes[i]==="ACT"?0.3:1}}>{compLabel}</th>,
+          <th key={"c"+i} style={{padding:"4px 8px",fontSize:9,fontWeight:600,textAlign:"right",color:AMBER,background:T.bgRow,letterSpacing:"0.05em",opacity: monthTypes[i]==="ACT"?0.3:1}}>{compLabel}</th>,
         ])}
         {["ACT",compLabel,"VAR"].map(h => (
           <th key={h} style={{padding:"4px 8px",fontSize:9,fontWeight:600,textAlign:"right",color:h==="ACT"?BLUE:h==="VAR"?RED:AMBER,letterSpacing:"0.05em"}}>{h}</th>
@@ -371,7 +371,7 @@ const TblRow = ({label,actArr,compArr,color,bold,indent,s,e,monthTypes,spot}) =>
   const totC   = cSlice?(spot ? cSlice[cSlice.length-1]??null : sum(cSlice)):null;
   const totV   = totC!==null&&totA!==null?totA-totC:null;
   return (
-    <tr className="tbl-row" style={{borderBottom:"1px solid #080f1a"}}>
+    <tr className="tbl-row" style={{borderBottom:"1px solid "+T.borderRow}}>
       <td style={{padding:"7px 20px",color,fontWeight:bold?600:400,fontSize:bold?12:11,paddingLeft:indent?32:20,position:"sticky",left:0,background:T.bgCard,zIndex:1}}>{label}</td>
       {aSlice.map((av,i) => {
         const cv = cSlice?cSlice[i]:null;
@@ -439,8 +439,6 @@ function BillingView({clientName, supabase, onClose, userEmail=""}) {
   const [invTab,   setInvTab]   = React.useState("credits"); // "credits" | "invoices"
   const [unlimited,setUnlimited]= React.useState(false);
   const [txPeriod, setTxPeriod]  = React.useState("30"); // days
-  const STRIPE_KEY = "PASTE_STRIPE_PUBLISHABLE_KEY";
-
   const PACKAGES = [
     {id:"spark",   name:"Spark",   credits:200,  price:"€10", priceId:"price_1TBr8936nlMWZMRYRFZb0mAv", desc:"200 questions",  color:"#a78bfa"},
     {id:"insight", name:"Insight", credits:400,  price:"€20", priceId:"price_1TBr9B36nlMWZMRYjnbtW4iB", desc:"400 questions",  color:"#a78bfa"},
@@ -484,7 +482,7 @@ function BillingView({clientName, supabase, onClose, userEmail=""}) {
       const resp = await fetch("/api/create-checkout", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({package: pkg.id, client: clientName, user_email: userEmail}),
+        body:JSON.stringify({package: pkg.id, client: clientName, user_email: userEmail, user_id: "", company_name: clientName}),
       });
       if(!resp.ok){let e="Server error "+resp.status;try{const j=await resp.json();e=j.error||e;}catch(_){}throw new Error(e);}
       const {url} = await resp.json();
@@ -512,9 +510,9 @@ function BillingView({clientName, supabase, onClose, userEmail=""}) {
       <div style={{padding:"16px 18px",flex:1}}>
 
         {/* Balance */}
-        <div style={{background:"linear-gradient(135deg,#0f2040,#0a1628)",border:"1px solid #1e3a5f",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+        <div style={{background:T.bgCard,border:"1px solid "+T.border,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
           <div style={{fontSize:10,color:T.textMuted,fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:4}}>Current balance</div>
-          <div style={{fontSize:28,fontWeight:700,color:credits===null?"#4a3d7a":unlimited?"#4ade80":credits>0?"#a78bfa":"#f87171",fontFamily:"'DM Mono',monospace"}}>
+          <div style={{fontSize:28,fontWeight:700,color:credits===null?T.textDim:unlimited?"#4ade80":credits>0?T.accent:"#f87171",fontFamily:"'DM Mono',monospace"}}>
             {credits===null?"…":unlimited?"∞":credits}
             <span style={{fontSize:12,fontWeight:400,color:T.textMuted,marginLeft:6}}>credits</span>
           </div>
@@ -554,7 +552,7 @@ function BillingView({clientName, supabase, onClose, userEmail=""}) {
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <div style={{fontSize:10,color:T.textMuted,fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.1em"}}>Transactions</div>
               <select value={txPeriod} onChange={e=>setTxPeriod(e.target.value)}
-                style={{background:T.bgRow,border:"1px solid #1e2d45",borderRadius:8,padding:"3px 8px",
+                style={{background:T.bgRow,border:"1px solid "+T.border,borderRadius:8,padding:"3px 8px",
                   color:T.textMuted,fontSize:10,outline:"none",fontFamily:"'DM Mono',monospace"}}>
                 <option value="7">Last 7 days</option>
                 <option value="30">Last 30 days</option>
@@ -617,8 +615,17 @@ function BillingView({clientName, supabase, onClose, userEmail=""}) {
           }
         </div>
 
-        <div style={{marginTop:8,padding:"10px 12px",background:"rgba(99,102,241,0.06)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:10}}>
+        <div style={{marginTop:8,padding:"10px 12px",background:"rgba(99,102,241,0.06)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div style={{fontSize:10,color:"#6366f1",fontFamily:"'DM Mono',monospace"}}>ℹ Credits never expire · Secure payment via Stripe · Prices VAT 0%</div>
+          <button onClick={async()=>{
+            const email = userEmail || clientName;
+            const {data:cr} = await supabase.from("ai_credits").select("balance,unlimited").eq("user_email",email).maybeSingle();
+            setCredits(cr?.unlimited ? Infinity : (cr?.balance ?? 0));
+            setUnlimited(cr?.unlimited ?? false);
+          }} style={{background:"none",border:"1px solid rgba(99,102,241,0.3)",borderRadius:6,padding:"3px 10px",
+            color:"#818cf8",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
+            ↻ Refresh
+          </button>
         </div>
       </div>
     </div>
@@ -747,7 +754,8 @@ TONE: Decisive and strategic. No deep dives into accounting detail. End with a b
       }),
     ]);
     setUsage(u => u + 1);
-    setCredits(newBal);
+    if(isUnlimited) setCredits(Infinity);
+    else setCredits(newBal);
   };
 
   const SYSTEM = `You are EBITDA-9000, an AI financial advisor embedded in a board-level dashboard called targetdash›. When a role is active, you respond as that persona and sign off with their name.
@@ -840,9 +848,14 @@ Financial data for this company only (${financialContext.period}, ${financialCon
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           system: SYSTEM,
-          messages: newMessages.map(m=>({role:m.role,content:m.content}))
+          messages: newMessages.map(m=>({role:m.role,content:m.content})),
+          user_email: userEmailProp || CLIENT_NAME,
         })
       });
+      if(res.status === 429) {
+        setMessages(prev=>[...prev,{role:"assistant",content:"You're sending too many requests. Please wait a moment and try again.",err:true}]);
+        setLoading(false); scrollBottom(); return;
+      }
       const data = await res.json();
       const reply = data.text || data.error || "No response generated.";
       setMessages(prev=>[...prev,{role:"assistant",content:reply}]);
@@ -2060,7 +2073,7 @@ function GroupStructureTab({entities,selectedEnt,setSelectedEnt,editingEnt,setEd
                   const parent=entities.find(e=>e.id===ent.parentId);
                   const subs=entities.filter(e=>e.parentId===ent.id);
                   return (
-                    <tr key={ent.id} className="tbl-row" style={{borderBottom:"1px solid #080f1a",cursor:"pointer"}} onClick={()=>setSelectedEnt(ent.id)}>
+                    <tr key={ent.id} className="tbl-row" style={{borderBottom:"1px solid "+T.borderRow,cursor:"pointer"}} onClick={()=>setSelectedEnt(ent.id)}>
                       <td style={{padding:"10px 16px"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <div style={{width:8,height:8,borderRadius:"50%",background:ent.color}}/>
@@ -2640,7 +2653,7 @@ function SettingsMenu({actData,actName,actLast,setActData,setActName,setActLast,
                       Not mapped to any model line
                     </div>
                     {unmapped.map((u,i)=>(
-                      <div key={i} style={{padding:"6px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #080f1a"}}>
+                      <div key={i} style={{padding:"6px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+T.borderRow}}>
                         <div>
                           <span style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:T.textMuted}}>{u.code}</span>
                           <span style={{fontSize:11,color:"#64748b",marginLeft:8}}>{u.name}</span>
@@ -2975,6 +2988,7 @@ Use €K. Max 15 rows.
 Available data — ${CLIENT_NAME} (${MONTHS[S]}–${MONTHS[E]} ${year}):
 ${rowSample}`,
           messages:[{role:"user",content:aiPrompt}],
+          user_email: email,
         }),
       });
       const resp = await res.json();
@@ -3423,7 +3437,7 @@ function ForecastTab({actuals,comp,compLabel,mode,setMode,S,E,fcRevData,fcEqData
               ].map(row=>{
                 const delta=row.scn-row.base, pct=row.base?(delta/Math.abs(row.base)*100).toFixed(1):0;
                 return (
-                  <div key={row.label} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #080f1a"}}>
+                  <div key={row.label} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid "+T.borderRow}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <div style={{width:6,height:6,borderRadius:"50%",background:row.color}}/>
                       <span style={{fontSize:12,color:T.textMuted}}>{row.label}</span>
@@ -3802,8 +3816,8 @@ function CommentsPanel({supabase, clientName, userName, enabled}) {
 
       {open&&(
         <div style={{position:"absolute",top:42,right:0,width:340,height:500,
-          display:"flex",flexDirection:"column",background:"#080e1c",
-          border:"1px solid "+T.border,borderRadius:14,boxShadow:"0 16px 60px #000a",overflow:"hidden",zIndex:2000}}>
+          display:"flex",flexDirection:"column",background:T.bgCard,
+          border:"1px solid "+T.border,borderRadius:14,boxShadow:"0 16px 60px rgba(0,0,0,0.25)",overflow:"hidden",zIndex:2000}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.border,
             display:"flex",alignItems:"center",justifyContent:"space-between",
             background:T.bgPanel,flexShrink:0}}>
@@ -3904,6 +3918,22 @@ function Dashboard({companyName}) {
     if(params.get("billing")==="success") {
       window.history.replaceState({}, "", window.location.pathname);
       setTimeout(()=>{ setSidebarOpen(true); setShowBilling(true); }, 1500);
+    }
+    // Credit purchase success — refresh credits from DB
+    if(params.get("credits")==="success") {
+      window.history.replaceState({}, "", window.location.pathname);
+      setTimeout(()=>{
+        supabase.auth.getUser().then(async ({data})=>{
+          const em = data?.user?.email;
+          if(em) {
+            const {data:cr} = await supabase.from("ai_credits").select("balance,unlimited").eq("user_email",em).maybeSingle();
+            setCredits(cr?.unlimited ? Infinity : (cr?.balance ?? 0));
+          }
+        });
+      }, 1000);
+    }
+    if(params.get("payment")==="success") {
+      window.history.replaceState({}, "", window.location.pathname);
     }
   },[]);
 
@@ -5074,17 +5104,17 @@ function Dashboard({companyName}) {
                         :sum(sliced);
                       const labelPad = row.indent ? "7px 20px 7px 36px" : "7px 20px";
                       const rowBg    = row.bold ? "rgba(255,255,255,0.02)" : "transparent";
-                      const topBorder = row.bold ? "1px solid #1e2d45" : "1px solid #080f1a";
+                      const topBorder = row.bold ? "1px solid "+T.border : "1px solid "+T.borderRow;
                       return (
-                        <tr key={ri} className="tbl-row" style={{borderBottom:"1px solid #080f1a",borderTop:topBorder,background:rowBg}}>
-                          <td style={{padding:labelPad,color:row.color,fontWeight:row.bold?700:400,fontSize:row.bold?12:11,position:"sticky",left:0,background:row.bold?"#130f26":"#120f26",zIndex:1,borderRight:"1px solid "+T.border}}>{row.label}</td>
+                        <tr key={ri} className="tbl-row" style={{borderBottom:"1px solid "+T.borderRow,borderTop:topBorder,background:rowBg}}>
+                          <td style={{padding:labelPad,color:row.color,fontWeight:row.bold?700:400,fontSize:row.bold?12:11,position:"sticky",left:0,background:row.bold?T.bgRow:T.bgCard,zIndex:1,borderRight:"1px solid "+T.border}}>{row.label}</td>
                           {sliced.map((v,i)=>{
                             const isComp=i+S>actLast;
                             return <td key={"a"+i} style={{padding:"7px 8px",textAlign:"right",
                               color:isComp?AMBER:row.color,fontWeight:row.bold?700:400,fontSize:11,
                               fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap",opacity:isComp?0.85:1}}>{fmt(v)}</td>;
                           })}
-                          <td style={{padding:"7px 10px",textAlign:"right",color:row.color,fontWeight:700,borderLeft:"1px solid #1e2d45",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{fmt(total)}</td>
+                          <td style={{padding:"7px 10px",textAlign:"right",color:row.color,fontWeight:700,borderLeft:"1px solid "+T.border,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{fmt(total)}</td>
                         </tr>
                       );
                     })}
@@ -5580,7 +5610,8 @@ function MfaEnrollScreen({onDone}) {
       <div style={{background:"rgba(14,12,24,0.97)",border:"1px solid #1e2d45",borderRadius:16,padding:"40px 36px",width:380,boxSizing:"border-box",textAlign:"center"}}>
         <div style={{width:44,height:44,borderRadius:"50%",background:T.logo,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:20}}>🔐</div>
         <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:6}}>Set up two-factor auth</div>
-        <div style={{fontSize:12,color:"#64748b",marginBottom:24}}>Scan this QR code with Google Authenticator</div>
+        <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>Two-factor authentication protects your account and your clients' financial data.</div>
+        <div style={{fontSize:11,color:"#64748b",marginBottom:24}}>Scan this QR code with Google Authenticator or a compatible app.</div>
         {qr ? (
           <img src={qr} alt="QR Code" style={{width:180,height:180,borderRadius:14,background:T.bgCard,padding:8,marginBottom:20}}/>
         ) : (
@@ -5648,6 +5679,20 @@ function AppWithAuth() {
     async function check(session) {
       if(!session) { setState('login'); return; }
 
+      // ── MFA CHECK ──────────────────────────────────────────────────────
+      // Check if user has enrolled TOTP factors
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if(aal) {
+        const currentLevel = aal.currentLevel;       // 'aal1' or 'aal2'
+        const nextLevel    = aal.nextLevel;           // 'aal1' or 'aal2'
+        // If user has enrolled factors (nextLevel=aal2) but hasn't verified yet (currentLevel=aal1)
+        if(nextLevel === 'aal2' && currentLevel === 'aal1') {
+          setState('mfa_verify');
+          return;
+        }
+      }
+
+      // ── PROFILE CHECK ──────────────────────────────────────────────────
       // Admin impersonation — opened from admin.targetdash.ai
       const params = new URLSearchParams(window.location.search);
       const adminClient = params.get('admin_client');
@@ -5671,8 +5716,18 @@ function AppWithAuth() {
 
       const plan = profile?.plan;
 
-      // Superuser always gets the dashboard
+      // Superuser — check if MFA enrollment needed, then go to dashboard
       if(plan === 'superuser') {
+        // Prompt MFA enrollment for superusers who haven't set it up
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const hasTotp = factors?.totp?.length > 0;
+        if(!hasTotp) {
+          // Store profile info for after enrollment
+          CLIENT_NAME = profile?.company_name || 'targetdash';
+          setCompanyName(CLIENT_NAME);
+          setState('mfa_enroll');
+          return;
+        }
         CLIENT_NAME = profile?.company_name || 'targetdash';
         setCompanyName(CLIENT_NAME);
         setState('ready');
@@ -5685,7 +5740,8 @@ function AppWithAuth() {
         return;
       }
       if(plan !== 'mainuser') {
-        window.location.href = 'https://www.targetdash.ai/getstarted';
+        // No valid plan — redirect to login (not getstarted, since we removed it)
+        window.location.href = 'https://www.targetdash.ai/login';
         return;
       }
 
@@ -5707,6 +5763,37 @@ function AppWithAuth() {
   );
 
   if(state === 'login') return <LoginPage />;
+
+  if(state === 'mfa_verify') return <MfaScreen onVerified={() => setState('loading_post_mfa')} />;
+
+  if(state === 'mfa_enroll') return <MfaEnrollScreen onDone={() => setState('ready')} />;
+
+  // After MFA verify, re-check session to load profile
+  if(state === 'loading_post_mfa') {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if(!session) { setState('login'); return; }
+      const { data: profile } = await supabase.from('user_profiles')
+        .select('company_name, plan, onboarded')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      const plan = profile?.plan;
+      if(plan === 'superuser' || (plan === 'mainuser' && profile?.onboarded)) {
+        CLIENT_NAME = profile?.company_name || 'Dashboard';
+        setCompanyName(CLIENT_NAME);
+        setState('ready');
+      } else if(!profile?.onboarded) {
+        window.location.href = 'https://www.targetdash.ai/onboarding';
+      } else {
+        window.location.href = 'https://www.targetdash.ai/login';
+      }
+    })();
+    return (
+      <div style={{minHeight:"100vh",background:"#0e0c18",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{color:"#5a5580",fontSize:13,fontFamily:"'DM Mono',monospace"}}>Loading…</div>
+      </div>
+    );
+  }
 
   return <Dashboard companyName={companyName}/>;
 }
