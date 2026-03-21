@@ -391,8 +391,8 @@ const TblRow = ({label,actArr,compArr,color,bold,indent,s,e,monthTypes,spot}) =>
   );
 };
 
-const PeriodBar = ({startM,endM,setStart,setEnd,compLabel,actLast}) => (
-  <div style={{borderBottom:"1px solid "+T.border,background:T.bgPanel,padding:"10px 32px",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+const PeriodBar = ({startM,endM,setStart,setEnd,compLabel,actLast,isMobile}) => (
+  <div style={{borderBottom:"1px solid "+T.border,background:T.bgPanel,padding:isMobile?"10px 16px":"10px 32px",display:"flex",alignItems:"center",gap:isMobile?10:16,flexWrap:"wrap"}}>
     <div style={{display:"flex",alignItems:"center",gap:8}}>
       <span style={{fontSize:10,color:T.textMuted,fontFamily:"'DM Mono',monospace"}}>From</span>
       <select className="psel" value={startM} onChange={e=>{const v=+e.target.value;setStart(v);if(v>endM)setEnd(v);}}>
@@ -403,32 +403,34 @@ const PeriodBar = ({startM,endM,setStart,setEnd,compLabel,actLast}) => (
         {MONTHS.map((m,i) => <option key={m} value={i}>{m}</option>)}
       </select>
     </div>
-    <div style={{display:"flex",gap:3,flex:1,flexWrap:"wrap"}}>
-      {MONTHS.map((m,i) => {
-        const inRange=i>=startM&&i<=endM;
-        const isEdge=i===startM||i===endM;
-        const isAct=i<=actLast;
-        let cls="mpill";
-        if(inRange&&!isEdge) cls+=" in-range";
-        if(isEdge) cls+=isAct?" is-edge-act":" is-edge-comp";
-        return (
-          <button key={m} className={cls} onClick={()=>{
-            if(i<startM) setStart(i);
-            else if(i>endM) setEnd(i);
-            else if(i===startM&&i<endM) setStart(i+1);
-            else if(i===endM&&i>startM) setEnd(i-1);
-            else{setStart(i);setEnd(i);}
-          }}>
-            <span style={{fontSize:10,lineHeight:1,color:isEdge?(isAct?T.accentHi:AMBER):(inRange?T.textMuted:T.textDim)}}>{m}</span>
-            <span style={{fontSize:8,lineHeight:1,fontWeight:700,color:isAct?BLUE:AMBER}}>{isAct?"ACT":compLabel}</span>
-          </button>
-        );
-      })}
-    </div>
-    <div style={{display:"flex",alignItems:"center",gap:12,fontSize:10,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>
+    {!isMobile && (
+      <div style={{display:"flex",gap:3,flex:1,flexWrap:"wrap"}}>
+        {MONTHS.map((m,i) => {
+          const inRange=i>=startM&&i<=endM;
+          const isEdge=i===startM||i===endM;
+          const isAct=i<=actLast;
+          let cls="mpill";
+          if(inRange&&!isEdge) cls+=" in-range";
+          if(isEdge) cls+=isAct?" is-edge-act":" is-edge-comp";
+          return (
+            <button key={m} className={cls} onClick={()=>{
+              if(i<startM) setStart(i);
+              else if(i>endM) setEnd(i);
+              else if(i===startM&&i<endM) setStart(i+1);
+              else if(i===endM&&i>startM) setEnd(i-1);
+              else{setStart(i);setEnd(i);}
+            }}>
+              <span style={{fontSize:10,lineHeight:1,color:isEdge?(isAct?T.accentHi:AMBER):(inRange?T.textMuted:T.textDim)}}>{m}</span>
+              <span style={{fontSize:8,lineHeight:1,fontWeight:700,color:isAct?BLUE:AMBER}}>{isAct?"ACT":compLabel}</span>
+            </button>
+          );
+        })}
+      </div>
+    )}
+    <div style={{display:"flex",alignItems:"center",gap:isMobile?8:12,fontSize:10,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap",marginLeft:isMobile?0:"auto"}}>
       <span><span style={{color:BLUE}}>●</span><span style={{color:SLATE}}> ACT</span></span>
       <span><span style={{color:AMBER}}>●</span><span style={{color:SLATE}}> {compLabel}</span></span>
-      <span style={{color:T.textDim,paddingLeft:10,borderLeft:"1px solid "+T.border}}>{MONTHS[startM]} – {MONTHS[endM]}</span>
+      {!isMobile && <span style={{color:T.textDim,paddingLeft:10,borderLeft:"1px solid "+T.border}}>{MONTHS[startM]} – {MONTHS[endM]}</span>}
     </div>
   </div>
 );
@@ -917,25 +919,46 @@ Financial data for this company only (${financialContext.period}, ${financialCon
           data-ai-float-btn
           onClick={() => setSidebarOpen(o => !o)}
           style={{
-            position:"fixed", bottom:20, right:20, zIndex:600,
-            width:48, height:48, borderRadius:"50%",
-            background:T.logo,
-            border:"none", cursor:"pointer", fontSize:18,
-            boxShadow:"0 4px 20px "+T.accentLo+"44",
+            position:"fixed", bottom:24, right:20, zIndex:600,
+            width:56, height:56, borderRadius:"50%",
+            background:"linear-gradient(135deg,#6d28d9,#9333ea)",
+            border:"2px solid rgba(167,139,250,0.4)", cursor:"pointer",
+            boxShadow:"0 6px 28px rgba(124,58,237,0.45)",
             display:"flex", alignItems:"center", justifyContent:"center",
+            transition:"all 0.2s",
           }}>
-          {sidebarOpen ? "✕" : (<svg width="24" height="24" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="e9k_a" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#818cf8" stopOpacity="0.22"/><stop offset="100%" stopColor="#a78bfa" stopOpacity="0"/></radialGradient><radialGradient id="e9k_c" cx="50%" cy="45%" r="50%"><stop offset="0%" stopColor="#1e3a6e"/><stop offset="100%" stopColor="#05060f"/></radialGradient></defs><circle cx="22" cy="22" r="22" fill="url(#e9k_a)"/><g opacity="0.15" stroke="#a5b4fc" strokeLinecap="round"><line x1="22" y1="4" x2="22" y2="0" strokeWidth="0.8"/><line x1="22" y1="40" x2="22" y2="44" strokeWidth="0.8"/><line x1="4" y1="22" x2="0" y2="22" strokeWidth="0.8"/><line x1="40" y1="22" x2="44" y2="22" strokeWidth="0.8"/><line x1="8" y1="8" x2="5" y2="5" strokeWidth="0.6"/><line x1="36" y1="8" x2="39" y2="5" strokeWidth="0.6"/></g><ellipse cx="22" cy="9" rx="9" ry="2.2" fill="none" stroke="#818cf8" strokeWidth="0.9" opacity="0.55"/><circle cx="22" cy="22" r="18" fill="url(#e9k_c)" stroke="rgba(129,140,248,0.35)" strokeWidth="0.8"/><rect x="10" y="13" width="24" height="20" rx="5" fill="rgba(10,16,45,0.95)" stroke="rgba(99,120,220,0.4)" strokeWidth="0.7"/><rect x="12" y="16" width="20" height="8" rx="2.5" fill="rgba(5,6,15,0.9)"/><rect x="13" y="17.5" width="6" height="3" rx="1.5" fill="#5b21b6"/><rect x="25" y="17.5" width="6" height="3" rx="1.5" fill="#5b21b6"/><rect x="14" y="18" width="4" height="2" rx="1" fill="#a78bfa"/><rect x="26" y="18" width="4" height="2" rx="1" fill="#a78bfa"/><circle cx="16" cy="19" r="0.8" fill="#bfdbfe" opacity="0.9"/><circle cx="28" cy="19" r="0.8" fill="#bfdbfe" opacity="0.9"/><rect x="13" y="26" width="2.5" height="4" rx="0.8" fill="#22c55e" opacity="0.9"/><rect x="17" y="27.5" width="2.5" height="2.5" rx="0.8" fill="#22c55e" opacity="0.7"/><rect x="21" y="26" width="2.5" height="4" rx="0.8" fill="#22c55e" opacity="0.85"/><rect x="25" y="28" width="2.5" height="2" rx="0.8" fill="#22c55e" opacity="0.6"/><rect x="29" y="26" width="2" height="4" rx="0.8" fill="#22c55e" opacity="0.75"/><line x1="22" y1="13" x2="22" y2="8" stroke="rgba(165,180,252,0.5)" strokeWidth="0.8" strokeLinecap="round"/><polygon points="22,5 24,7.5 22,10 20,7.5" fill="#a5b4fc" opacity="0.85"/><circle cx="22" cy="7.5" r="1" fill="white" opacity="0.6"/></svg>)}
+          <style>{`.ai-float-pulse{animation:aiFPulse 2.5s ease-in-out infinite}@keyframes aiFPulse{0%,100%{box-shadow:0 6px 28px rgba(124,58,237,0.45)}50%{box-shadow:0 6px 36px rgba(124,58,237,0.7)}}`}</style>
+          {sidebarOpen ? (
+            <span style={{fontSize:22,color:"#fff",lineHeight:1}}>✕</span>
+          ) : (
+            <span className="ai-float-pulse" style={{fontSize:13,fontWeight:800,color:"#fff",fontFamily:"'DM Mono',monospace",letterSpacing:"-0.5px"}}>E9K</span>
+          )}
         </button>
       )}
       {(!isMobile || sidebarOpen) && (
-    <div data-ai-sidebar style={{position:"fixed",top:0,right:0,width:isMobile?"100vw":380,height:"100vh",
+    <>
+    {isMobile && sidebarOpen && (
+      <div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",zIndex:490}}/>
+    )}
+    <div data-ai-sidebar style={{position:"fixed",
+      top:isMobile?"auto":0,bottom:isMobile?0:"auto",right:0,left:isMobile?0:"auto",
+      width:isMobile?"100vw":380,height:isMobile?"85vh":"100vh",
       display:"flex",flexDirection:"column",background:T.bgPanel,
-      borderLeft:"1px solid "+T.border,zIndex:500}}>
+      borderLeft:isMobile?"none":"1px solid "+T.border,
+      borderTop:isMobile?"1px solid "+T.border:"none",
+      borderRadius:isMobile?"20px 20px 0 0":"0",
+      zIndex:500,
+      animation:isMobile?"slideUp 0.3s ease-out":"none",
+    }}>
+    <style>{`@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
 
       {showBilling&&<BillingView clientName={CLIENT_NAME} supabase={supabase} onClose={()=>setShowBilling(false)} userEmail={userEmailProp}/>}
       <div style={{display:showBilling?"none":"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
       {/* Header */}
       <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.border,display:"flex",alignItems:"center",justifyContent:"space-between",background:T.bgPanel,flexShrink:0,height:56}}>
+        {isMobile && (
+          <div style={{position:"absolute",top:8,left:"50%",transform:"translateX(-50%)",width:36,height:4,borderRadius:2,background:"rgba(255,255,255,0.2)"}}/>
+        )}
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:28,height:28,borderRadius:"50%",background:T.bgPanel,border:"1px solid rgba(129,140,248,0.3)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden"}}><svg width="28" height="28" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="e9k_a2" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#818cf8" stopOpacity="0.22"/><stop offset="100%" stopColor="#a78bfa" stopOpacity="0"/></radialGradient><radialGradient id="e9k_c2" cx="50%" cy="45%" r="50%"><stop offset="0%" stopColor="#1e3a6e"/><stop offset="100%" stopColor="#05060f"/></radialGradient></defs><circle cx="22" cy="22" r="22" fill="url(#e9k_a2)"/><g opacity="0.15" stroke="#a5b4fc" strokeLinecap="round"><line x1="22" y1="4" x2="22" y2="0" strokeWidth="0.8"/><line x1="22" y1="40" x2="22" y2="44" strokeWidth="0.8"/><line x1="4" y1="22" x2="0" y2="22" strokeWidth="0.8"/><line x1="40" y1="22" x2="44" y2="22" strokeWidth="0.8"/></g><ellipse cx="22" cy="9" rx="9" ry="2.2" fill="none" stroke="#818cf8" strokeWidth="0.9" opacity="0.55"/><circle cx="22" cy="22" r="18" fill="url(#e9k_c2)" stroke="rgba(129,140,248,0.35)" strokeWidth="0.8"/><rect x="10" y="13" width="24" height="20" rx="5" fill="rgba(10,16,45,0.95)" stroke="rgba(99,120,220,0.4)" strokeWidth="0.7"/><rect x="12" y="16" width="20" height="8" rx="2.5" fill="rgba(5,6,15,0.9)"/><rect x="13" y="17.5" width="6" height="3" rx="1.5" fill="#5b21b6"/><rect x="25" y="17.5" width="6" height="3" rx="1.5" fill="#5b21b6"/><rect x="14" y="18" width="4" height="2" rx="1" fill="#a78bfa"/><rect x="26" y="18" width="4" height="2" rx="1" fill="#a78bfa"/><circle cx="16" cy="19" r="0.8" fill="#bfdbfe" opacity="0.9"/><circle cx="28" cy="19" r="0.8" fill="#bfdbfe" opacity="0.9"/><rect x="13" y="26" width="2.5" height="4" rx="0.8" fill="#22c55e" opacity="0.9"/><rect x="17" y="27.5" width="2.5" height="2.5" rx="0.8" fill="#22c55e" opacity="0.7"/><rect x="21" y="26" width="2.5" height="4" rx="0.8" fill="#22c55e" opacity="0.85"/><rect x="25" y="28" width="2.5" height="2" rx="0.8" fill="#22c55e" opacity="0.6"/><rect x="29" y="26" width="2" height="4" rx="0.8" fill="#22c55e" opacity="0.75"/><line x1="22" y1="13" x2="22" y2="8" stroke="rgba(165,180,252,0.5)" strokeWidth="0.8" strokeLinecap="round"/><polygon points="22,5 24,7.5 22,10 20,7.5" fill="#a5b4fc" opacity="0.85"/><circle cx="22" cy="7.5" r="1" fill="white" opacity="0.6"/></svg></div>
           <div>
@@ -4913,6 +4936,14 @@ function Dashboard({companyName}) {
               <button key={y} className={"yr-btn"+(year===y?" active":"")} onClick={()=>{ setYear(y); setActLast(ACT_LAST_BY_YEAR[y]??ACT_LAST_DEFAULT); }}>{y}</button>
             ))}
           </div>
+          {isMobile && (
+            <select value={year} onChange={e=>{setYear(e.target.value);setActLast(ACT_LAST_BY_YEAR[e.target.value]??ACT_LAST_DEFAULT);}}
+              style={{background:T.bgCard,border:"1px solid "+T.accentLo,borderRadius:8,padding:"5px 10px",
+                color:T.accent,fontFamily:"'DM Mono',monospace",fontSize:12,fontWeight:600,
+                outline:"none",cursor:"pointer",WebkitAppearance:"none",appearance:"none"}}>
+              {["2023","2024","2025","2026"].map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
           <button
             onClick={()=>{const n=themeKey==="dark"?"light":"dark";setThemeKey(n);localStorage.setItem("tf_theme",n);}}
             title={themeKey==="dark"?"Switch to light mode":"Switch to dark mode"}
@@ -4924,9 +4955,6 @@ function Dashboard({companyName}) {
             onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
             {themeKey==="dark"?"☀":"🌙"}
           </button>
-          {isMobile && (
-            <button onClick={()=>setSidebarOpen(o=>!o)} style={{background:"rgba(109,40,217,0.15)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:10,padding:"4px 8px",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><svg width="20" height="20" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="e9k_a3" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#818cf8" stopOpacity="0.22"/><stop offset="100%" stopColor="#a78bfa" stopOpacity="0"/></radialGradient><radialGradient id="e9k_c3" cx="50%" cy="45%" r="50%"><stop offset="0%" stopColor="#1e3a6e"/><stop offset="100%" stopColor="#05060f"/></radialGradient></defs><circle cx="22" cy="22" r="22" fill="url(#e9k_a3)"/><ellipse cx="22" cy="9" rx="9" ry="2.2" fill="none" stroke="#818cf8" strokeWidth="0.9" opacity="0.55"/><circle cx="22" cy="22" r="18" fill="url(#e9k_c3)" stroke="rgba(129,140,248,0.35)" strokeWidth="0.8"/><rect x="10" y="13" width="24" height="20" rx="5" fill="rgba(10,16,45,0.95)" stroke="rgba(99,120,220,0.4)" strokeWidth="0.7"/><rect x="12" y="16" width="20" height="8" rx="2.5" fill="rgba(5,6,15,0.9)"/><rect x="14" y="18" width="4" height="2" rx="1" fill="#a78bfa"/><rect x="26" y="18" width="4" height="2" rx="1" fill="#a78bfa"/><rect x="13" y="26" width="2.5" height="4" rx="0.8" fill="#22c55e" opacity="0.9"/><rect x="17" y="27.5" width="2.5" height="2.5" rx="0.8" fill="#22c55e" opacity="0.7"/><rect x="21" y="26" width="2.5" height="4" rx="0.8" fill="#22c55e" opacity="0.85"/><rect x="25" y="28" width="2.5" height="2" rx="0.8" fill="#22c55e" opacity="0.6"/><rect x="29" y="26" width="2" height="4" rx="0.8" fill="#22c55e" opacity="0.75"/><line x1="22" y1="13" x2="22" y2="8" stroke="rgba(165,180,252,0.5)" strokeWidth="0.8" strokeLinecap="round"/><polygon points="22,5 24,7.5 22,10 20,7.5" fill="#a5b4fc" opacity="0.85"/></svg><span style={{fontSize:10,fontFamily:"'DM Mono',monospace",fontWeight:700,color:"#c4b5fd"}}>9000</span></button>
-          )}
           <CommentsPanel
             supabase={supabase}
             clientName={CLIENT_NAME}
@@ -4982,7 +5010,7 @@ function Dashboard({companyName}) {
         ))}
       </div>
 
-      <div style={{marginRight:380}}><PeriodBar startM={S} endM={E} setStart={setStartM} setEnd={setEndM} compLabel={compLabel} actLast={actLast}/></div>
+      <div style={{marginRight:isMobile?0:380}}><PeriodBar startM={S} endM={E} setStart={setStartM} setEnd={setEndM} compLabel={compLabel} actLast={actLast} isMobile={isMobile}/></div>
 
 
       {isGroup&&!["group","data","deadlines"].includes(tab)&&(
