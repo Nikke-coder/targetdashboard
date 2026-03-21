@@ -1056,6 +1056,7 @@ Financial data for this company only (${financialContext.period}, ${financialCon
 
     </div>
       </div>
+      </>
       )}
     </>
   );
