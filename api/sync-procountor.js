@@ -1,120 +1,84 @@
-// api/sync-procountor.js — Vercel Serverless Function
+// api/sync-netvisor.js — Vercel Serverless Function
 // Env vars needed per dashboard:
-//   PROCOUNTOR_CLIENT_ID     = your OAuth2 client_id
-//   PROCOUNTOR_CLIENT_SECRET = your OAuth2 client_secret
-//   PROCOUNTOR_REDIRECT_URI  = https://your-dashboard.vercel.app/api/procountor-callback
+//   NETVISOR_CUSTOMER_ID     = your Netvisor Customer ID
+//   NETVISOR_PARTNER_ID      = Partner ID (from Netvisor API agreement)
+//   NETVISOR_PARTNER_SECRET  = Partner secret
+//   NETVISOR_PRIVATE_KEY     = Your company's private key
+//   NETVISOR_LANGUAGE        = FI (default)
 //   SUPABASE_URL             = https://jzqgndcrukggcwthxyrv.supabase.co
 //   SUPABASE_SERVICE_KEY     = service role key
 
+import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
-const PROCOUNTOR_BASE = "https://api.procountor.com/api";
-const SANDBOX_BASE    = "https://api-test.procountor.com/api";
-
-// Two Supabase instances:
-// - appSupabase: app DB (wzooguqwbuxepwkffwpp) — stores accounting_connections, ai_credits etc.
-// - supabase: sync DB (jzqgndcrukggcwthxyrv) — stores client_snapshots
-const appSupabase = createClient(
-  "https://wzooguqwbuxepwkffwpp.supabase.co",
-  process.env.SUPABASE_APP_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY
-);
+const NETVISOR_BASE = "https://integration.netvisor.fi";
 
 const supabase = createClient(
   process.env.SUPABASE_URL || "https://jzqgndcrukggcwthxyrv.supabase.co",
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// ── OAuth2 token fetch ───────────────────────────────────────────────────────
-function deobfuscate(str, clientName) {
-  try {
-    const key = clientName + "targetflow2025";
-    const bin = atob(str);
-    return bin.split("").map((c,i)=>
-      String.fromCharCode(c.charCodeAt(0)^key.charCodeAt(i%key.length))
-    ).join("");
-  } catch(e) { return str; }
+// ── Netvisor HMAC authentication header ──────────────────────────────────────
+function buildAuthHeader(url) {
+  const timestamp  = new Date().toISOString().replace("T"," ").substring(0,19);
+  const transId    = crypto.randomBytes(8).toString("hex");
+  const lang       = process.env.NETVISOR_LANGUAGE || "FI";
+  const customerId = process.env.NETVISOR_CUSTOMER_ID;
+  const partnerId  = process.env.NETVISOR_PARTNER_ID;
+
+  // String to sign: URL + "&" + customerId + "&" + partnerId + "&" + lang + "&" + timestamp + "&" + transId
+  const toSign   = `${url}&${customerId}&${partnerId}&${lang}&${timestamp}&${transId}`;
+  const mac1     = crypto.createHmac("sha256", process.env.NETVISOR_PRIVATE_KEY).update(toSign).digest("hex");
+  const mac2     = crypto.createHmac("sha256", process.env.NETVISOR_PARTNER_SECRET).update(mac1).digest("hex");
+
+  return [
+    `Integration=${partnerId}`,
+    `CustomerId=${customerId}`,
+    `Timestamp=${timestamp}`,
+    `Language=${lang}`,
+    `TransactionId=${transId}`,
+    `MAC=${mac2}`,
+    `MacHashCalculationAlgorithm=SHA256`,
+  ].join("&");
 }
 
-async function getCredentials(client) {
-  // Try env vars first, then Supabase
-  if(process.env.PROCOUNTOR_CLIENT_ID) {
-    return { client_id: process.env.PROCOUNTOR_CLIENT_ID, client_secret: process.env.PROCOUNTOR_CLIENT_SECRET };
-  }
-  const { data } = await appSupabase.from("accounting_connections")
-    .select("credentials").eq("client", client).eq("system","procountor").maybeSingle();
-  if(!data?.credentials) throw new Error("No Procountor credentials configured. Connect via Settings → Accounting System.");
-  return {
-    client_id:     deobfuscate(data.credentials.client_id, client),
-    client_secret: deobfuscate(data.credentials.client_secret, client),
-  };
-}
-
-async function getAccessToken(client) {
-  const creds = await getCredentials(client);
-  const res = await fetch(`${SANDBOX_BASE}/oauth/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type:    "client_credentials",
-      client_id:     creds.client_id,
-      client_secret: creds.client_secret,
-    }),
+// ── Fetch from Netvisor ───────────────────────────────────────────────────────
+async function fetchNetvisor(path) {
+  const url     = `${NETVISOR_BASE}${path}`;
+  const authStr = buildAuthHeader(url);
+  const res     = await fetch(url, {
+    headers: { "X-Netvisor-Authentication": authStr },
   });
-  if (!res.ok) throw new Error(`Auth failed: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  return data.access_token;
+  if (!res.ok) throw new Error(`Netvisor fetch failed: ${res.status} ${await res.text()}`);
+  return res.text(); // returns XML
 }
 
-// ── Fetch P&L report ─────────────────────────────────────────────────────────
-async function fetchPL(token, startDate, endDate) {
-  const url = `${SANDBOX_BASE}/reports/incomestatement?startDate=${startDate}&endDate=${endDate}&periodType=MONTHLY`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`P&L fetch failed: ${res.status}`);
-  return res.json();
-}
-
-// ── Fetch Balance Sheet ───────────────────────────────────────────────────────
-async function fetchBalance(token, endDate) {
-  const url = `${SANDBOX_BASE}/reports/balancesheet?endDate=${endDate}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`Balance fetch failed: ${res.status}`);
-  return res.json();
-}
-
-// ── Map Procountor P&L → dashboard format ────────────────────────────────────
-function mapPLToDashboard(procountorData) {
-  // Procountor returns rows with account codes and amounts per period
-  // Map to dashboard's expected format: { account, name, months: [jan, feb, ...] }
+// ── Parse Netvisor XML P&L ────────────────────────────────────────────────────
+function parseNetvisorPL(xml) {
+  // Very simplified XML parsing — in production use a proper XML parser
+  // Netvisor returns AccountingReportByMonth with Ledgers
   const rows = [];
-  if (!procountorData?.rows) return rows;
-
-  for (const row of procountorData.rows) {
-    rows.push({
-      account: row.accountCode || "",
-      name:    row.name || "",
-      months:  row.periods?.map(p => p.amount || 0) || [],
-      total:   row.total || 0,
-    });
+  const matches = xml.matchAll(/<AccountingLedger[^>]*>([\s\S]*?)<\/AccountingLedger>/g);
+  for (const m of matches) {
+    const account = m[1].match(/<AccountNumber>(.*?)<\/AccountNumber>/)?.[1] || "";
+    const name    = m[1].match(/<AccountName>(.*?)<\/AccountName>/)?.[1] || "";
+    const amounts = [...m[1].matchAll(/<MonthlyAmount[^>]*>(.*?)<\/MonthlyAmount>/g)]
+      .map(a => parseFloat(a[1].replace(",",".")) || 0);
+    rows.push({ account, name, months: amounts, total: amounts.reduce((a,b)=>a+b,0) });
   }
   return rows;
 }
 
-// ── Map Procountor Balance → dashboard format ─────────────────────────────────
-function mapBalanceToDashboard(procountorData) {
+// ── Parse Netvisor XML Balance ────────────────────────────────────────────────
+function parseNetvisorBalance(xml) {
   const rows = [];
-  if (!procountorData?.rows) return rows;
-
-  for (const row of procountorData.rows) {
-    rows.push({
-      account: row.accountCode || "",
-      name:    row.name || "",
-      value:   row.amount || 0,
-      side:    row.side || "ASSETS", // ASSETS | LIABILITIES
-    });
+  const matches = xml.matchAll(/<BalanceSheetRow[^>]*>([\s\S]*?)<\/BalanceSheetRow>/g);
+  for (const m of matches) {
+    const account = m[1].match(/<AccountNumber>(.*?)<\/AccountNumber>/)?.[1] || "";
+    const name    = m[1].match(/<AccountName>(.*?)<\/AccountName>/)?.[1] || "";
+    const value   = parseFloat(m[1].match(/<Amount>(.*?)<\/Amount>/)?.[1]?.replace(",",".") || "0");
+    const side    = parseFloat(value) >= 0 ? "ASSETS" : "LIABILITIES";
+    rows.push({ account, name, value, side });
   }
   return rows;
 }
@@ -124,57 +88,54 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
   const { client, fromMonth, toMonth, year, scope } = req.body;
-  // fromMonth/toMonth: 0-11 (Jan-Dec)
-  // scope: ["pl", "balance"]
-
   if (!client) return res.status(400).json({ error: "Missing client" });
 
   const logs = [];
   const log  = (msg) => { logs.push(msg); console.log(msg); };
 
   try {
-    log("🔐 Authenticating with Procountor…");
-    const token = await getAccessToken(client);
-    log("✓ Authenticated");
+    log("🔐 Building Netvisor authentication…");
 
-    const startDate = `${year}-${String(fromMonth + 1).padStart(2,"0")}-01`;
-    const endDate   = new Date(year, toMonth + 1, 0)
-      .toISOString().split("T")[0]; // last day of toMonth
+    const startDate = `${year}${String(fromMonth + 1).padStart(2,"0")}01`;
+    const endDate   = `${year}${String(toMonth + 1).padStart(2,"0")}${new Date(year, toMonth + 1, 0).getDate()}`;
 
     let plData      = null;
     let balanceData = null;
 
     if (scope.includes("pl")) {
       log(`📡 Fetching P&L ${startDate} → ${endDate}…`);
-      const raw = await fetchPL(token, startDate, endDate);
-      plData    = mapPLToDashboard(raw);
+      const xml = await fetchNetvisor(
+        `/accountingledger.nv?startdate=${startDate}&enddate=${endDate}&reportformat=bymonth`
+      );
+      plData = parseNetvisorPL(xml);
       log(`✅ P&L: ${plData.length} rows mapped`);
     }
 
     if (scope.includes("balance")) {
       log(`📡 Fetching Balance Sheet as of ${endDate}…`);
-      const raw   = await fetchBalance(token, endDate);
-      balanceData = mapBalanceToDashboard(raw);
+      const xml   = await fetchNetvisor(
+        `/balancesheet.nv?enddate=${endDate}`
+      );
+      balanceData = parseNetvisorBalance(xml);
       log(`✅ Balance: ${balanceData.length} rows mapped`);
     }
 
-    // Save to Supabase — upsert into client_snapshots
     log("💾 Saving to Supabase…");
     const upsertData = {
       client,
       last_month:  toMonth,
       updated_at:  new Date().toISOString(),
-      act_name:    `Procountor sync ${startDate}–${endDate}`,
+      act_name:    `Netvisor sync ${startDate}–${endDate}`,
     };
-    if (plData)      upsertData.act_data  = JSON.stringify(plData);
-    if (balanceData) upsertData.csv_data  = JSON.stringify(balanceData);
+    if (plData)      upsertData.act_data = JSON.stringify(plData);
+    if (balanceData) upsertData.csv_data = JSON.stringify(balanceData);
 
     const { error } = await supabase
       .from("client_snapshots")
       .upsert(upsertData, { onConflict: "client" });
 
     if (error) throw new Error(`Supabase error: ${error.message}`);
-    log(`✓ Saved to Supabase`);
+    log("✓ Saved to Supabase");
 
     return res.json({ ok: true, logs, rowsPL: plData?.length, rowsBalance: balanceData?.length });
 
