@@ -5696,6 +5696,21 @@ function MfaEnrollScreen({onDone}) {
 function LoginPage() {
   const [loading, setLoading] = React.useState(false);
 
+  // If URL has auth tokens (OAuth callback), show loading instead of login button
+  const hasTokens = window.location.hash.includes('access_token') || window.location.search.includes('code=');
+  if(hasTokens) {
+    return (
+      <div style={{minHeight:'100vh',background:'#0e0c18',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <div style={{textAlign:'center'}}>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:28,fontWeight:700,color:'#f0ecff',marginBottom:8,letterSpacing:'-.02em'}}>
+            targetdash<span style={{color:'#7c3aed'}}>›</span>
+          </div>
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:'#5a5580',marginBottom:40}}>Signing you in…</div>
+        </div>
+      </div>
+    );
+  }
+
   const signIn = async () => {
     setLoading(true);
     await supabase.auth.signInWithOAuth({
