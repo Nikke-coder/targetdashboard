@@ -133,6 +133,9 @@ let   CLIENT_NAME    = 'Dashboard';  // loaded from user_profiles
 const ANTHROPIC_KEY  = null;         // AI goes through /api/ai-chat proxy
 const ALLOWED_EMAILS = [];           // open to all authenticated paying users
 
+// Only these clients see the hardcoded demo data — all others start empty
+const DEMO_CLIENTS = ['targetdash HQ', 'Stremet', 'Manutec', 'Accrease', 'Drop Design Pool', 'Niittysiemen', 'Tepcomp', 'Strand', 'Cuuma'];
+
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const ACT_LAST_DEFAULT = 11;
 // Per-year last confirmed ACT month (0=Jan…11=Dec, -1=full BUD)
@@ -4007,6 +4010,7 @@ function Dashboard({companyName}) {
   const [fcName,      setFcName]     = useState(null);
   const [actData,     setActData]    = useState(null);
   const [glData,      setGlData]     = useState(null);
+  const [snapshotEmpty, setSnapshotEmpty] = useState(false); // true when client has no data
   const [userRole,    setUserRole]   = useState("mainuser"); // "mainuser" | "member"
   const [memberData,  setMemberData] = useState(null);       // member record from DB
   const [actName,     setActName]    = useState(null);
@@ -4214,8 +4218,9 @@ function Dashboard({companyName}) {
   };
   const _consolidatedAct  = _buildConsolidated("act");
   const _consolidatedComp = _buildConsolidated(mode==="forecast"?"fc":"bud");
-  const _rawAct  = (isGroup && _consolidatedAct)  ? _consolidatedAct  : actData||(DATA_BY_YEAR[year]||actBase);
-  const _rawComp = (isGroup && _consolidatedComp) ? _consolidatedComp : (mode==="forecast"?(fcData||csvData||estBase):(budData||csvData||budBase));
+  const isDemoClient = DEMO_CLIENTS.includes(CLIENT_NAME);
+  const _rawAct  = (isGroup && _consolidatedAct)  ? _consolidatedAct  : actData||(isDemoClient ? (DATA_BY_YEAR[year]||actBase) : null);
+  const _rawComp = (isGroup && _consolidatedComp) ? _consolidatedComp : (mode==="forecast"?(fcData||csvData||(isDemoClient?estBase:null)):(budData||csvData||(isDemoClient?budBase:null)));
   const Z12 = ()=>[0,0,0,0,0,0,0,0,0,0,0,0];
 
   // ── Consolidated = sum of all entity uploads + eliminations ──────────────
@@ -4434,7 +4439,11 @@ function Dashboard({companyName}) {
           .select("*")
           .eq("client", CLIENT_NAME)
           .limit(1);
-        if(!rows||!rows.length) return;
+        if(!rows||!rows.length) {
+          // No snapshot for this client — mark as empty (unless it's a demo client)
+          if(!DEMO_CLIENTS.includes(CLIENT_NAME)) setSnapshotEmpty(true);
+          return;
+        }
         const s = rows[0];
         if(s.act_data)  { try{ const d=JSON.parse(s.act_data);  setActData(d);  }catch(e){} }
         if(s.gl_data)   { try{ const d=JSON.parse(s.gl_data);   setGlData(d);   }catch(e){} }
@@ -4991,6 +5000,41 @@ function Dashboard({companyName}) {
 
       <div style={{padding:isMobile?"16px 16px":"22px 32px",marginRight:isMobile?0:380}}>
 
+        {/* ── EMPTY STATE — new client with no data ── */}
+        {(snapshotEmpty && !actData && !csvData && !isDemoClient) ? (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"60vh"}}>
+            <div style={{textAlign:"center",maxWidth:480}}>
+              <div style={{width:72,height:72,borderRadius:20,background:"linear-gradient(135deg,"+T.accentLo+","+T.accent+")",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 28px",fontSize:32}}>📊</div>
+              <div style={{fontSize:26,fontWeight:700,color:T.text,letterSpacing:"-0.03em",marginBottom:8}}>Welcome to targetdash</div>
+              <div style={{fontSize:14,color:T.textMuted,lineHeight:1.7,marginBottom:32}}>
+                Your dashboard for <b style={{color:T.text}}>{CLIENT_NAME}</b> is ready.<br/>
+                Upload your financial data to get started — P&L, balance sheet, or connect your accounting system.
+              </div>
+              <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+                <button onClick={()=>setSidebarOpen(true)}
+                  style={{padding:"13px 28px",background:T.accent,border:"none",borderRadius:12,color:"#fff",
+                    fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'Outfit',sans-serif",
+                    boxShadow:"0 4px 24px rgba(124,58,237,0.35)",transition:"all .2s"}}>
+                  Upload data →
+                </button>
+              </div>
+              <div style={{marginTop:40,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
+                {[
+                  {icon:"📁",title:"CSV / Excel",desc:"Upload P&L and balance sheet files"},
+                  {icon:"🔗",title:"Netvisor / Procountor",desc:"Connect your accounting system"},
+                  {icon:"🤖",title:"AI advisor",desc:"6 advisory roles once data is loaded"},
+                ].map(f=>(
+                  <div key={f.title} style={{background:T.bgCard,border:"1px solid "+T.border,borderRadius:14,padding:"20px 16px",textAlign:"center"}}>
+                    <div style={{fontSize:24,marginBottom:8}}>{f.icon}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:4}}>{f.title}</div>
+                    <div style={{fontSize:10,color:T.textMuted,fontFamily:"'DM Mono',monospace",lineHeight:1.5}}>{f.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (<>
+
         {tab==="group"&&(
           <GroupStructureTab entities={entities} selectedEnt={selectedEnt} setSelectedEnt={setSelectedEnt} editingEnt={editingEnt} setEditingEnt={setEditingEnt} isGroup={isGroup} addEntity={addEntity} updateEntity={updateEntity} removeEntity={removeEntity}/>
         )}
@@ -5248,6 +5292,7 @@ function Dashboard({companyName}) {
 
         )}
 
+        </>)}
       </div>
 
       <AiAssistant financialContext={{
@@ -5695,21 +5740,6 @@ function MfaEnrollScreen({onDone}) {
 
 function LoginPage() {
   const [loading, setLoading] = React.useState(false);
-
-  // If URL has auth tokens (OAuth callback), show loading instead of login button
-  const hasTokens = window.location.hash.includes('access_token') || window.location.search.includes('code=');
-  if(hasTokens) {
-    return (
-      <div style={{minHeight:'100vh',background:'#0e0c18',display:'flex',alignItems:'center',justifyContent:'center'}}>
-        <div style={{textAlign:'center'}}>
-          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:28,fontWeight:700,color:'#f0ecff',marginBottom:8,letterSpacing:'-.02em'}}>
-            targetdash<span style={{color:'#7c3aed'}}>›</span>
-          </div>
-          <div style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:'#5a5580',marginBottom:40}}>Signing you in…</div>
-        </div>
-      </div>
-    );
-  }
 
   const signIn = async () => {
     setLoading(true);
