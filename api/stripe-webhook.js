@@ -56,43 +56,15 @@ async function sbUpdate(path, body) {
   });
 }
 
-// ── Add credits reliably: SELECT → UPDATE or INSERT ──
+// ── Add credits atomically via Postgres function ──
 async function addCredits(userEmail, client, amount) {
-  const existing = await sbGet(`ai_credits?user_email=eq.${encodeURIComponent(userEmail)}&select=id,balance,unlimited`);
-
-  if (existing && existing.length > 0) {
-    // Row exists — UPDATE balance
-    const row = existing[0];
-    const newBal = row.unlimited ? row.balance : (row.balance || 0) + amount;
-    await sbUpdate(`ai_credits?user_email=eq.${encodeURIComponent(userEmail)}`, {
-      balance: newBal,
-      updated_at: new Date().toISOString(),
-    });
-    return newBal;
-  } else {
-    // No row — check if there's a row without user_email for this client
-    const byClient = await sbGet(`ai_credits?client=eq.${encodeURIComponent(client)}&user_email=is.null&select=id,balance`);
-    if (byClient && byClient.length > 0) {
-      // Found orphan row — claim it and add credits
-      const row = byClient[0];
-      const newBal = (row.balance || 0) + amount;
-      await sbUpdate(`ai_credits?id=eq.${row.id}`, {
-        user_email: userEmail,
-        balance: newBal,
-        updated_at: new Date().toISOString(),
-      });
-      return newBal;
-    } else {
-      // No row at all — INSERT new
-      await sbInsert('ai_credits', {
-        user_email: userEmail,
-        client: client,
-        balance: amount,
-        updated_at: new Date().toISOString(),
-      });
-      return amount;
-    }
-  }
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/add_credits`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ p_user_email: userEmail, p_client: client, p_amount: amount }),
+  });
+  const newBalance = await res.json();
+  return newBalance;
 }
 
 // ── Main handler ──
